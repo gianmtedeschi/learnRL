@@ -52,8 +52,8 @@ class TrajectorySampler:
         # initialize parameters
         np.random.seed()
         perf = 0
-        rewards = np.zeros(self.env.horizon, dtype=np.float128)
-        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float128)
+        rewards = np.zeros(self.env.horizon, dtype=np.float64)
+        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
         if params is not None:
             self.pol.set_parameters(thetas=params)
 

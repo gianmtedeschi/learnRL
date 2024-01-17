@@ -26,7 +26,7 @@ class LQ(gym.Env):
     def __init__(self):
         self.ds = 1  # state dimension
         self.da = 1  # action dimension
-        self.horizon = 10  # task horizon (reset is not automatic!)
+        self.horizon = 100  # task horizon (reset is not automatic!)
         self.gamma = 0.9  # discount factor
         self.max_pos = 10 * np.ones(self.ds)  # max state for clipping
         self.max_action = np.inf * np.ones(self.da)  # max action for clipping
