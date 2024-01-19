@@ -54,6 +54,7 @@ class TrajectorySampler:
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+        states = np.zeros(self.env.horizon, dtype=np.float64)
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -70,14 +71,15 @@ class TrajectorySampler:
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action
-            _, rew, done, _ = self.env.step(action=a)
+            state, rew, done, _ = self.env.step(action=a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
 
-            # update the vectors of rewards and scores
+            # update the vectors of rewards scores and state
             rewards[t] = rew
             scores[t, :] = score
+            states[t] = state
 
             if done:
                 if t < self.env.horizon - 1:
@@ -85,4 +87,4 @@ class TrajectorySampler:
                     scores[t+1:] = 0
                 break
 
-        return [perf, rewards, scores]
+        return [perf, rewards, scores, state]

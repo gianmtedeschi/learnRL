@@ -21,7 +21,7 @@ class GaussianPolicy(BasePolicy, ABC):
             dim_state: int = 1,
             dim_action: int = 1,
             multi_linear: bool = False,
-            deterministic: bool = True
+            constant: bool = True
 
     ) -> None:
         # Superclass initialization
@@ -41,7 +41,7 @@ class GaussianPolicy(BasePolicy, ABC):
         self.dim_action = dim_action
         self.tot_params = dim_action * dim_state
         self.multi_linear = multi_linear
-        self.deterministic = deterministic
+        self.constant = constant
         self.std_decay = std_decay
         self.std_min = std_min
 
@@ -52,7 +52,7 @@ class GaussianPolicy(BasePolicy, ABC):
             err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
             err_msg += f"\n{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
-        if self.deterministic:
+        if self.constant:
             mean = self.parameters
         else:
             mean = np.array(self.parameters @ state, dtype=np.float64)
@@ -80,4 +80,6 @@ class GaussianPolicy(BasePolicy, ABC):
         scores = (action_deviation * state) / (self.std_dev ** 2)
         if self.multi_linear:
             scores = np.ravel(scores)
+        if self.constant:
+            scores = (action - self.parameters) / (self.std_dev ** 2)
         return scores

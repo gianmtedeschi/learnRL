@@ -25,7 +25,7 @@ ALG = alg_selection[0]
 
 # environment
 horizon = 100
-gamma = 0.995
+gamma = 0
 RENDER = False
 
 # algorithm
@@ -54,7 +54,7 @@ elif LR_STRATEGY == "adam" and ALG == "pg":
     INIT_LR = 1e-2
     dir += "adam_001_"
 else:
-    INIT_LR = 1e-9
+    INIT_LR = 1e-3
     dir += "clr_000001_"
 
 # test
@@ -215,7 +215,7 @@ alg_parameters = dict(
     lr=[INIT_LR],
     lr_strategy=LR_STRATEGY,
     estimator_type=ESTIMATOR,
-    initial_theta=[0.5] * tot_params,
+    initial_theta=[2] * tot_params,
     ite=ITE,
     batch_size=BATCH,
     env=env,
