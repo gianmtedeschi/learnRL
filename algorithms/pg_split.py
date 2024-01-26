@@ -16,6 +16,17 @@ pol = GaussianPolicy(
     multi_linear=False,
     constant=True
 )
+
+todo --> specialize gaussian policy for the use case
+        split point should be part of the policy since are needed for draw_action
+        and compute_score (play using param in your region, computer score in your region)
+
+todo --> adjust the logic of the algorithm, check the sign of the current gradient and the
+        previous one, when they are opposite activate the split process, before that just normally
+        update the policy
+
+todo --> from split return also the split point associated to the possible division as to be able
+        to understand who is the father of the 2 params
 """
 
 
@@ -23,11 +34,9 @@ pol = GaussianPolicy(
 # imports
 import numpy as np
 from envs.base_env import BaseEnv
-from policies import BasePolicy, GaussianPolicy
+from policies import BasePolicy, GaussianPolicy, SplitGaussianPolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms import PolicyGradient
-
-# todo
 from common.utils import TrajectoryResults, SplitResults
 from common.tree import BinaryTree
 from simulation.trajectory_sampler import TrajectorySampler
@@ -42,7 +51,7 @@ import os
 
 
 # Class Implementation
-class PG_Split(PolicyGradient):
+class PolicyGradientSplit(PolicyGradient):
     def __init__(
             self, lr: np.array = None,
             lr_strategy: str = "constant",
@@ -58,7 +67,8 @@ class PG_Split(PolicyGradient):
             natural: bool = False,
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
-            split_grid: np.array = None
+            split_grid: np.array = None,
+            max_splits: int = 10
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG_split] lr must be positive!"
@@ -109,7 +119,7 @@ class PG_Split(PolicyGradient):
         self.dim_state = self.env.ds
 
         # Useful structures
-        self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
+        self.theta_history = dict.fromkeys([i for i in range(self.ite)], np.array(0))
         self.time = 0
         self.performance_idx = np.zeros(ite, dtype=np.float64)
         self.best_theta = np.zeros(self.dim, dtype=np.float64)
@@ -120,16 +130,27 @@ class PG_Split(PolicyGradient):
         self.deterministic_curve = np.zeros(self.ite)
 
         # init the theta history
-        self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+        self.theta_history[self.time] = copy.deepcopy(self.thetas)
 
         # create the adam optimizers
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam()
+
+        # self.policy_history = BinaryTree()
+        # self.policy_history.insert(self.thetas)
+
+        self.policy.history.insert(self.thetas)
+        self.max_splits = max_splits
+        self.split_done = False
+        self.start_split = False
+
         return
 
     def learn(self) -> None:
         """Learning function"""
+        splits = 0
+        gradient_history = []
         for i in tqdm(range(self.ite)):
             res = []
 
@@ -146,8 +167,8 @@ class PG_Split(PolicyGradient):
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
                 reward_vector[j, :] = res[j][TrajectoryResults.RewList]
+                state_vector[j, :] = res[j][TrajectoryResults.StateList]
                 score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
-                state_vector[j, :, :, :] = res[j][TrajectoryResults.StateList]
 
             self.performance_idx[i] = np.mean(perf_vector)
 
@@ -155,24 +176,28 @@ class PG_Split(PolicyGradient):
             self.update_best_theta(current_perf=self.performance_idx[i])
 
             # Look for a split
-            self.learn_split(score_vector, state_vector, reward_vector)
+            if splits < self.max_splits and self.start_split:
+                self.learn_split(score_vector, state_vector, reward_vector)
 
-            #todo se lo split è avvenuto non devo stimare il gradiente ma ricominciare con la nuova policy
+            if not self.split_done:
+                # Compute the estimated gradient
+                if self.estimator_type == "REINFORCE":
+                    estimated_gradient = np.mean(
+                        perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
+                elif self.estimator_type == "GPOMDP":
+                    estimated_gradient = self.update_gpomdp(
+                        reward_trajectory=reward_vector, score_trajectory=score_vector
+                    )
+                else:
+                    err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
+                    raise NotImplementedError(err_msg)
 
-            # Compute the estimated gradient
-            if self.estimator_type == "REINFORCE":
-                estimated_gradient = np.mean(
-                    perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
-            elif self.estimator_type == "GPOMDP":
-                estimated_gradient = self.update_gpomdp(
-                    reward_trajectory=reward_vector, score_trajectory=score_vector
-                )
-                print("Estimated Gradient:", estimated_gradient)
+                gradient_history.append(estimated_gradient)
+                self.update_parameters(estimated_gradient)
             else:
-                err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
-                raise NotImplementedError(err_msg)
-
-            self.update_parameters(estimated_gradient)
+                self.policy.history.print_tree()
+                splits += 1
+                self.split_done = False
 
             # Log
             if self.verbose:
@@ -190,32 +215,38 @@ class PG_Split(PolicyGradient):
                 self.save_results()
 
             # save theta history
-            self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+            self.theta_history[self.time] = copy.deepcopy(self.thetas)
 
             # time update
             self.time += 1
 
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
+
+            # check if we reached an optimal configuration
+            if splits < self.max_splits:
+                self.check_local_optima(gradient_history)
         return
 
-    #todo adjust split condition
     def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
         tmp_r, tmp_l = [], []
         score_left, score_right = [], []
         traj = []
+        closest_leaf = self.policy.history.find_closest_leaf(split_state)
+        traj_l, traj_r = 0, 0
 
+        # print(state_vector)
         for i in range(len(state_vector)):
             for j in range(len(state_vector[i])):
                 if state_vector[i][j] < split_state and (
-                        closest_leaf is None or closest_leaf.val[1] is None or states[i][j] >= closest_leaf.val[1]):
-                    tmp_l.append(score_vector[i][j])
+                        closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] >= closest_leaf.val[1]):
+                    tmp_l.append(score_vector[i][j].item())
                     tmp_r.append(0)
                     traj_l += 1
                 elif state_vector[i][j] >= split_state and (
-                        closest_leaf is None or closest_leaf.val[1] is None or states[i][j] <= closest_leaf.val[1]):
+                        closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] <= closest_leaf.val[1]):
                     tmp_l.append(0)
-                    tmp_r.append(score_vector[i][j])
+                    tmp_r.append(score_vector[i][j].item())
                     traj_r += 1
                 else:
                     tmp_r.append(0)
@@ -228,16 +259,17 @@ class PG_Split(PolicyGradient):
             traj_r = 0
             tmp_r, tmp_l = [], []
 
-        reward_trajectory_left = np.cumsum(score_left, axis=1) * reward_vector
-        reward_trajectory_right = np.cumsum(score_right, axis=1) * reward_vector
-        estimated_gradient_left = np.mean(reward_trajectory_left, axis=1)
-        estimated_gradient_right = np.mean(reward_trajectory_right, axis=1)
+        reward_trajectory_left = np.sum(np.cumsum(score_left, axis=1) * reward_vector, axis=1)
+        reward_trajectory_right = np.sum(np.cumsum(score_right, axis=1) * reward_vector, axis=1)
+
+        estimated_gradient_left = np.mean(reward_trajectory_left)
+        estimated_gradient_right = np.mean(reward_trajectory_right)
 
         estimated_gradient = [estimated_gradient_left, estimated_gradient_right]
         reward_trajectory = [reward_trajectory_left, reward_trajectory_right]
 
-        #todo here you are setting self.thetas!!!!!!
-        new_thetas = [self.update_parameters(estimated_gradient_left), self.update_parameters(estimated_gradient_right)]
+        new_thetas = [self.update_parameters(estimated_gradient_left, local=True, split_state=split_state),
+                      self.update_parameters(estimated_gradient_right, local=True, split_state=split_state)]
 
         for i, elem in enumerate(traj):
             if elem[0] > elem[1]:
@@ -246,14 +278,13 @@ class PG_Split(PolicyGradient):
                 traj_r += 1
 
         traj = [traj_l, traj_r]
-
         return [estimated_gradient, reward_trajectory, new_thetas, traj]
 
     def learn_split(self, score_vector, state_vector, reward_vector) -> None:
-        gradient_norms, correct_splits, splits = [], [], []
-        correct_mask = []
+        gradient_norms, correct_splits = [], []
         test = []
         tmp = []
+        splits = {}
 
         for i in range(len(self.split_grid)):
             # print("Iteration split:", i + 1)
@@ -265,36 +296,76 @@ class PG_Split(PolicyGradient):
             trajectories = res[SplitResults.ValidTrajectories]
             thetas = res[SplitResults.SplitThetas]
 
-            if self.check_split(reward_trajectory[0], reward_trajectory[1], trajectories):
-                correct_mask.append(True)
-            else:
-                correct_mask.append(False)
+            # gradient_norms.append(np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1]))
+            gradient_norm = np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1])
 
-            splits.append(thetas)
+            if self.check_split(reward_trajectory[0], reward_trajectory[1], trajectories):
+                splits[self.split_grid[i]] = [thetas, True, gradient_norm]
+
+            else:
+                splits[self.split_grid[i]] = [thetas, False, gradient_norm]
+
+            # splits[self.split_grid[i]] = [thetas]
+            # splits.append(thetas)
 
             # print("norm left: ", np.linalg.norm(grad_tmp[0]))
             # print("norm right: ", np.linalg.norm(grad_tmp[1]))
             # print("sum norm: ", np.linalg.norm(grad_tmp[0])+np.linalg.norm(grad_tmp[1]))
 
-            gradient_norms.append(np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1]))
+            # print(estimated_gradient[0], estimated_gradient[1])
 
+        valid_splits = {key: value for key, value in splits.items() if value[1] is True}
+        if valid_splits:
+            split = max(valid_splits.items(), key=lambda x: x[1][2])
+
+            best_split_thetas = split[1][0]
+            best_split_state = split[0]
+
+            print("Split result: ", best_split_thetas)
+            print("Split state :", best_split_state)
+
+            self.policy.history.insert(best_split_thetas, best_split_state.item())
+            self.split_done = True
+            self.thetas = np.array(self.policy.history.get_all_leaves(self.policy.history.nodes))
+
+            index = np.argwhere(self.split_grid == best_split_state)
+            self.split_grid = np.delete(self.split_grid, index)
+        else:
+            print("No split found!")
+
+        """
+        for thetas, valid, norm in splits.values():
+            if valid:
+                tmp.append(gradient_norms[i])
+                test.append(thetas)
+                correct_splits.append(self.split_grid[i])
+
+        
         for i in range(len(correct_mask)):
             if correct_mask[i]:
                 tmp.append(gradient_norms[i])
                 test.append(splits[i])
                 correct_splits.append(self.split_grid[i])
-                print(gradient_norms[i], i + 1)
+                # print(gradient_norms[i], i + 1)
+        
 
-        if correct_splits.size == 0:
+        if len(correct_splits) == 0:
             print("No split found!")
         else:
             max_norm = np.argmax(tmp)
             best_split_thetas = test[max_norm]
             best_split_state = correct_splits[max_norm]
 
-            print("Split result: ", best_split_thetas, tmp[max_norm], correct_splits[max_norm])
+            print("Split result: ", best_split_thetas)
             print("Split state :", best_split_state)
 
+            self.policy.history.insert(best_split_thetas, best_split_state.item())
+            self.split_done = True
+            self.thetas = np.array(self.policy.history.get_all_leaves(self.policy.history.nodes))
+
+            index = np.argwhere(self.split_grid == best_split_state)
+            self.split_grid = np.delete(self.split_grid, index)
+        
             self.policy = GaussianPolicy(
                 parameters=best_split_thetas,
                 dim_state=self.env.ds,
@@ -305,17 +376,30 @@ class PG_Split(PolicyGradient):
                 multi_linear=False,
                 constant=True
             )
+            self.thetas = best_split_thetas
+            self.policy_history.insert(best_split_thetas, best_split_state.item())
+            """
 
-    def update_parameters(self, estimated_gradient):
+    def update_parameters(self, estimated_gradient, local=False, split_state=None):
+        new_theta = None
+        old_theta = self.thetas
         # Update parameters
+        if split_state is not None:
+            old_theta = self.policy.history.find_closest_leaf(split_state).val[0]
+
         if self.lr_strategy == "constant":
-            self.thetas = self.thetas + self.lr * estimated_gradient
+            new_theta = old_theta + self.lr * estimated_gradient
         elif self.lr_strategy == "adam":
             adaptive_lr = self.adam_optimizer.next(estimated_gradient)
-            self.thetas = self.thetas + adaptive_lr
+            new_theta = old_theta + adaptive_lr
         else:
             err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
             raise NotImplementedError(err_msg)
+
+        if local:
+            return new_theta
+        else:
+            self.thetas = new_theta
 
     def compute_const(self, left, right):
         res = []
@@ -329,7 +413,7 @@ class PG_Split(PolicyGradient):
         var = np.var(res)
 
         # print("Mean", np.mean(res))
-        # print("Var", np.mean(var))
+        # print("Var", var)
         return np.sqrt(var * 1.96)
 
     def check_split(self, left, right, n):
@@ -338,8 +422,33 @@ class PG_Split(PolicyGradient):
         # print("Dot product", np.dot(left, right))
         # print("c/n:", self.compute_const(left, right)/np.sqrt(n))
         # print("test:", test, n)
-
         return test < 0
 
+    def check_local_optima(self, gradient_history) -> None:
+        if len(gradient_history) <= 1:
+            self.start_split = False
+            return
 
+        latest_two = gradient_history[-2:]
+        res = np.multiply(latest_two[0], latest_two[1])
 
+        self.start_split = all(val < 0 for val in res)
+        if self.start_split:
+            print("Optimal configuration found!")
+
+    def save_results(self) -> None:
+        results = {
+            "performance": np.array(self.performance_idx, dtype=float).tolist(),
+            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            "thetas_history": list(value.tolist() for value in self.theta_history.values()),
+            "last_theta": np.array(self.thetas, dtype=float).tolist(),
+            "best_perf": float(self.best_performance_theta),
+            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
+        }
+
+        # Save the json
+        name = self.directory + "/pg_results.json"
+        with io.open(name, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(results, ensure_ascii=False, indent=4))
+            f.close()
+        return

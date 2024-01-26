@@ -138,7 +138,6 @@ class PolicyGradient:
                 estimated_gradient = self.update_gpomdp(
                     reward_trajectory=reward_vector, score_trajectory=score_vector
                 )
-                print("Estimated Gradient:", estimated_gradient)
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
@@ -176,8 +175,7 @@ class PolicyGradient:
 
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
-        # todo meaning???
-        # self.sample_deterministic_curve()
+
         return
 
     def update_gpomdp(

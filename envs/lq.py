@@ -7,9 +7,10 @@ from gym.utils import seeding
 import numpy as np
 import math
 from numbers import Number
+from envs.base_env import BaseEnv
 
 # class
-class LQ(gym.Env):
+class LQ(BaseEnv):
     """
     Gym environment implementing an LQR problem
 

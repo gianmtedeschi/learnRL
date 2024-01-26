@@ -2,7 +2,8 @@
 import copy
 
 from envs import *
-from policies import GaussianPolicy
+from policies import GaussianPolicy, SplitGaussianPolicy
+from algorithms import PolicyGradientSplit
 from algorithms import PolicyGradient
 from data_processors import IdentityDataProcessor
 from art import *
@@ -54,7 +55,7 @@ elif LR_STRATEGY == "adam" and ALG == "pg":
     INIT_LR = 1e-2
     dir += "adam_001_"
 else:
-    INIT_LR = 1e-3
+    INIT_LR = 1e-5
     dir += "clr_000001_"
 
 # test
@@ -147,7 +148,7 @@ dp = IdentityDataProcessor()
 #     raise NotImplementedError
 
 tot_params = s_dim * a_dim
-pol = GaussianPolicy(
+pol = SplitGaussianPolicy(
     parameters=np.ones(tot_params),
     dim_state=s_dim,
     dim_action=a_dim,
@@ -211,11 +212,15 @@ pol = GaussianPolicy(
 #     )
 #     alg = PolicyGradient(**alg_parameters)
 
+split_grid = np.linspace(env.max_pos, -env.max_pos, 100)
+split_grid = np.append(split_grid, np.array(0))
+
+
 alg_parameters = dict(
     lr=[INIT_LR],
     lr_strategy=LR_STRATEGY,
     estimator_type=ESTIMATOR,
-    initial_theta=[2] * tot_params,
+    initial_theta=[0] * tot_params,
     ite=ITE,
     batch_size=BATCH,
     env=env,
@@ -225,12 +230,16 @@ alg_parameters = dict(
     verbose=DEBUG,
     natural=NATURAL,
     checkpoint_freq=100,
-    n_jobs=N_JOBS_PARAM
+    n_jobs=N_JOBS_PARAM,
+    split_grid=split_grid
 )
-alg = PolicyGradient(**alg_parameters)
+# alg = PolicyGradient(**alg_parameters)
+alg = PolicyGradientSplit(**alg_parameters)
 
 if __name__ == "__main__":
     # Learn phase
+    print("GRIGLIA", split_grid)
+
     print(text2art("== LQ =="))
     if MODE in ["learn", "learn_test"]:
         print(text2art("Learn Start"))

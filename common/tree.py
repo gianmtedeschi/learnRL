@@ -1,3 +1,5 @@
+import numpy as np
+
 class Node:
     def __init__(self, key, node_id):
         self.left = None
@@ -9,6 +11,8 @@ class Node:
 class BinaryTree:
     def __init__(self):
         self.root = None
+
+        #todo fix
         self.nodes = []
 
     def insert(self, key, split=None):
@@ -96,6 +100,13 @@ class BinaryTree:
     #     else:
     #         return self._find_associated_node(root.right, number) or root
 
+    def get_all_leaves(self, history):
+        res = []
+        for Node in history:
+            if Node.val[1] is None:
+                res.append(Node.val[0].item())
+
+        return res
     def print_inorder(self):
         print("Inorder Traversal:", self.inorder_traversal(self.root))
 

@@ -87,4 +87,4 @@ class TrajectorySampler:
                     scores[t+1:] = 0
                 break
 
-        return [perf, rewards, scores, state]
+        return [perf, rewards, scores, states]

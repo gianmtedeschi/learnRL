@@ -34,10 +34,6 @@ class BaseEnv(ABC):
     def reset(self) -> None:
         pass
 
-    @abstractmethod
-    def sample_state(self, args: dict = None):
-        pass
-
 
 class MujocoBase(BaseEnv, ABC):
     def __init__(

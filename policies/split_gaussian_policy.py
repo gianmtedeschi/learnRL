@@ -1,14 +1,15 @@
-"""Implementation of a Gaussian Policy"""
+"""Implementation of a Gaussian Policy for the Split PG"""
 
 # imports
 from policies import BasePolicy
-from abc import ABC
+from policies import GaussianPolicy
 import numpy as np
 import copy
+from common.tree import BinaryTree
 
 
 # class
-class GaussianPolicy(BasePolicy, ABC):
+class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
     """
     Implementation of a Gaussian Policy.
     In case of linear policy the mean will be: parameters @ state.
@@ -22,11 +23,12 @@ class GaussianPolicy(BasePolicy, ABC):
             dim_state: int = 1,
             dim_action: int = 1,
             multi_linear: bool = False,
-            constant: bool = True
+            constant: bool = True,
+            history: BinaryTree = BinaryTree()
 
     ) -> None:
         # Superclass initialization
-        super().__init__()
+        super().__init__(parameters, std_dev)
 
         # Attributes with checks
         err_msg = "[GaussPolicy] parameters is None!"
@@ -46,6 +48,7 @@ class GaussianPolicy(BasePolicy, ABC):
         self.std_decay = std_decay
         self.std_min = std_min
 
+        self.history = history
         return
 
     def draw_action(self, state) -> float:
@@ -53,38 +56,24 @@ class GaussianPolicy(BasePolicy, ABC):
             err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
             err_msg += f"\n{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
-        if self.constant:
+
+        if self.history is None:
             mean = self.parameters
-        else:
-            mean = np.array(self.parameters @ state, dtype=np.float64)
+            action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
 
-        action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
+        mean = self.history.find_closest_leaf(state.item())
+        if mean is None:
+            action = np.random.normal(self.history.root.val[0], np.identity(1) * self.std_dev)
+        else:
+            action = np.random.normal(mean.val[0], np.identity(1) * self.std_dev)
+
         return action
-
-    def reduce_exploration(self):
-        self.std_dev = np.clip(self.std_dev - self.std_decay, self.std_min, np.inf)
-
-    def set_parameters(self, thetas) -> None:
-        if not self.multi_linear:
-            self.parameters = copy.deepcopy(thetas)
-        else:
-            self.parameters = np.array(np.split(thetas, self.dim_action))
-
-    def get_parameters(self):
-        return self.parameters
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:
             return super().compute_score(state, action)
 
-        state = np.ravel(state)
-        action_deviation = action - (self.parameters @ state)
-        if self.multi_linear:
-            state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
-            action_deviation = action_deviation[:, np.newaxis]
-        scores = (action_deviation * state) / (self.std_dev ** 2)
-        if self.multi_linear:
-            scores = np.ravel(scores)
-        if self.constant:
-            scores = (action - self.parameters) / (self.std_dev ** 2)
+        leaf = self.history.find_closest_leaf(state.item())
+        scores = (action - leaf.val[0]) / (self.std_dev ** 2)
+
         return scores

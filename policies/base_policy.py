@@ -20,6 +20,10 @@ class BasePolicy(ABC):
         pass
 
     @abstractmethod
+    def get_parameters(self):
+        pass
+
+    @abstractmethod
     def compute_score(self, state, action):
         pass
 
