@@ -1,18 +1,20 @@
 import numpy as np
+import graphviz
 
 class Node:
-    def __init__(self, key, node_id):
+    def __init__(self, key, node_id, father=None):
         self.left = None
         self.right = None
         self.val = key
         self.node_id = node_id
+        self.father = father
 
 
 class BinaryTree:
     def __init__(self):
         self.root = None
 
-        #todo fix
+        # todo fix use dict
         self.nodes = []
 
     def insert(self, key, split=None):
@@ -36,8 +38,8 @@ class BinaryTree:
         # add split point
         root.val = [split if v is None else v for v in root.val]
 
-        root.left = Node([key[0], None], node_id)
-        root.right = Node([key[1], None], node_id+1)
+        root.left = Node([key[0], None], node_id, root)
+        root.right = Node([key[1], None], node_id + 1, root)
         self.nodes.append(root.left)
         self.nodes.append(root.right)
 
@@ -100,13 +102,32 @@ class BinaryTree:
     #     else:
     #         return self._find_associated_node(root.right, number) or root
 
-    def get_all_leaves(self, history):
+    def get_all_leaves(self):
         res = []
-        for Node in history:
+        for Node in self.nodes:
+            if Node.val[1] is None:
+                res.append(Node)
+
+        return res
+
+    def get_new_policy(self):
+        res = []
+        for Node in self.nodes:
             if Node.val[1] is None:
                 res.append(Node.val[0].item())
 
         return res
+
+    def get_father(self, node):
+        leaves = self.get_all_leaves()
+        res = None
+        for order, Node in enumerate(leaves):
+            if order == node:
+                res = Node.father
+                break
+
+        return res
+
     def print_inorder(self):
         print("Inorder Traversal:", self.inorder_traversal(self.root))
 
@@ -127,6 +148,20 @@ class BinaryTree:
                 stack.append((node.right, level + 1, " " * (level * 6) + "|- R: "))
                 stack.append((node.left, level + 1, " " * (level * 6) + "|- L: "))
 
+    def _to_dot(self, node, dot):
+        if node:
+            dot.node(str(node.node_id), label=str(node.val))
+            if node.left:
+                dot.edge(str(node.node_id), str(node.left.node_id))
+                self._to_dot(node.left, dot)
+            if node.right:
+                dot.edge(str(node.node_id), str(node.right.node_id))
+                self._to_dot(node.right, dot)
+
+    def to_png(self, filename='binary_tree.png'):
+        dot = graphviz.Digraph(format='png')
+        self._to_dot(self.root, dot)
+        dot.render(filename, format='png', cleanup=True)
 
 # Example usage:
 if __name__ == "__main__":
@@ -140,7 +175,7 @@ if __name__ == "__main__":
     # tree.print_tree()
 
     for key in keys:
-        tree.insert(key, key+1)
+        tree.insert(key, key + 1)
     tree.print_tree()
 
     # tree.print_inorder()

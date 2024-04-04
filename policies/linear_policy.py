@@ -35,7 +35,7 @@ class LinearPolicy(BasePolicy, ABC):
         return
 
     def draw_action(self, state) -> float:
-        if len(state) != self.dim_state:
+        if state.size != self.dim_state:
             err_msg = f"[LinPolicy] the state has not the same dimension of the parameter vector:"
             err_msg += f"{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
@@ -43,7 +43,8 @@ class LinearPolicy(BasePolicy, ABC):
         return action
 
     def reduce_exploration(self):
-        raise NotImplementedError("[LinPolicy] Ops, not implemented yet!")
+        pass
+        # raise NotImplementedError("[LinPolicy] Ops, not implemented yet!")
 
     def set_parameters(self, thetas) -> None:
         if not self.multi_linear:

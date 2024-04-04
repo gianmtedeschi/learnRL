@@ -19,23 +19,26 @@ class LQ(BaseEnv):
 
     Run script to compute optimal policy parameters
     """
-    metadata = {
+    metaaction_dimta = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
     }
 
-    def __init__(self):
-        self.ds = 1  # state dimension
-        self.da = 1  # action dimension
-        self.horizon = 100  # task horizon (reset is not automatic!)
-        self.gamma = 0.9  # discount factor
-        self.max_pos = 10 * np.ones(self.ds)  # max state for clipping
-        self.max_action = np.inf * np.ones(self.da)  # max action for clipping
-        self.sigma_noise = 0 * np.eye(self.ds)  # std dev of environment noise
-        self.A = np.eye(self.ds) * 0.9
-        self.B = np.eye(self.ds, self.da) * 0.9
-        self.Q = 1 * np.eye(self.ds)
-        self.R = 1 * np.eye(self.da)
+    def __init__(self,
+                 horizon=100,
+                 gamma=0.9) -> None:
+
+        self.state_dim = 1  # state dimension
+        self.action_dim = 1  # action dimension
+        self.horizon = horizon  # task horizon (reset is not automatic!)
+        self.gamma = gamma  # discount factor
+        self.max_pos = 10 * np.ones(self.state_dim)  # max state for clipping
+        self.max_action = np.inf * np.ones(self.action_dim)  # max action for clipping
+        self.sigma_noise = 0 * np.eye(self.state_dim)  # std dev of environment noise
+        self.A = np.eye(self.state_dim) * 0.9
+        self.B = np.eye(self.state_dim, self.action_dim) * 0.9
+        self.Q = 1 * np.eye(self.state_dim)
+        self.R = 1 * np.eye(self.action_dim)
 
         # Gym attributes
         self.viewer = None
@@ -52,7 +55,7 @@ class LQ(BaseEnv):
 
     def step(self, action, render=False):
         u = np.clip(np.ravel(np.atleast_1d(action)), -self.max_action, self.max_action).flatten()
-        noise = np.dot(self.sigma_noise, np.random.randn(self.ds))
+        noise = np.dot(self.sigma_noise, np.random.randn(self.state_dim))
         xn = np.clip(np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
         cost = np.dot(self.state,
                       np.dot(self.Q, self.state)) + \
@@ -62,7 +65,7 @@ class LQ(BaseEnv):
         self.timestep += 1
 
         return self.get_state(), -(cost).item(), self.timestep >= self.horizon, {
-            'danger': 0}  # done after fixed horizon (manual reset)
+            'action_dimnger': 0}  # done after fixed horizon (manual reset)
 
     def reset(self, state=None):
         """
@@ -85,7 +88,7 @@ class LQ(BaseEnv):
         return [seed]
 
     def render(self, mode='human', close=False):
-        if self.ds not in [1, 2]:
+        if self.state_dim not in [1, 2]:
             return
         if close:
             if self.viewer is not None:
@@ -98,7 +101,7 @@ class LQ(BaseEnv):
         xscale = screen_width / world_width
         ballradius = 3
 
-        if self.ds == 1:
+        if self.state_dim == 1:
             screen_height = 400
         else:
             world_height = math.ceil((self.max_pos[1] * 2) * 1.5)
@@ -115,7 +118,7 @@ class LQ(BaseEnv):
             self.masstrans = rendering.Transform()
             mass.add_attr(self.masstrans)
             self.viewer.add_geom(mass)
-            if self.ds == 1:
+            if self.state_dim == 1:
                 self.track = rendering.Line((0, 100), (screen_width, 100))
             else:
                 self.track = rendering.Line((0, screen_height / 2), (screen_width, screen_height / 2))
@@ -128,7 +131,7 @@ class LQ(BaseEnv):
 
         x = self.state[0]
         ballx = x * xscale + screen_width / 2.0
-        if self.ds == 1:
+        if self.state_dim == 1:
             bally = 100
         else:
             y = self.state[1]
@@ -258,7 +261,7 @@ class LQ(BaseEnv):
 
     def grad_Sigma(self, K, Sigma=None):
         """
-        Policy gradient wrt (adaptive) covariance Sigma
+        Policy gradient wrt (aaction_dimptive) covariance Sigma
         """
         I = np.eye(self.Q.shape[0], self.Q.shape[1])
         if not np.array_equal(self.A, I) or not np.array_equal(self.B, I):
@@ -331,11 +334,11 @@ class LQ(BaseEnv):
         Qfun = np.asscalar(Qfun) / n_random_xn
         return Qfun
 
-    def set_ds(self, ds):
-        self.ds = ds
+    def set_state_dim(self, state_dim):
+        self.state_dim = state_dim
 
-    def set_da(self, da):
-        self.da = da
+    def set_action_dim(self, action_dim):
+        self.action_dim = action_dim
 
     def computer_r_max(self, episodes=None):
         if episodes is not None:
@@ -350,7 +353,7 @@ if __name__ == '__main__':
     """
     env = LQ()
 
-    sigma_controller = 1 * np.ones(env.da)
+    sigma_controller = 1 * np.ones(env.action_dim)
     theta_star = env.computeOptimalK()
     print('theta^* = ', theta_star)
     print('J^* = ', env.computeJ(theta_star, sigma_controller))

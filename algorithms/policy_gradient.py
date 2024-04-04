@@ -25,6 +25,7 @@ from adam.adam import Adam
 # maybe in utils?
 import os
 
+
 # Class Implementation
 class PolicyGradient:
     """This Class implements Policy Gradient Algorithms via REINFORCE or GPOMDP."""
@@ -41,6 +42,7 @@ class PolicyGradient:
             directory: str = "",
             verbose: bool = False,
             natural: bool = False,
+            baselines: str = None,
             checkpoint_freq: int = 1,
             n_jobs: int = 1
     ) -> None:
@@ -82,11 +84,12 @@ class PolicyGradient:
         self.batch_size = batch_size
         self.verbose = verbose
         self.natural = natural
+        self.baselines = baselines
         self.checkpoint_freq = checkpoint_freq
         self.n_jobs = n_jobs
         # self.parallel_computation = bool(self.n_jobs != 1)
-        self.dim_action = self.env.da
-        self.dim_state = self.env.ds
+        self.dim_action = self.env.action_dim
+        self.dim_state = self.env.state_dim
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -136,7 +139,7 @@ class PolicyGradient:
                     perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
             elif self.estimator_type == "GPOMDP":
                 estimated_gradient = self.update_gpomdp(
-                    reward_trajectory=reward_vector, score_trajectory=score_vector
+                    reward_vector=reward_vector, score_trajectory=score_vector
                 )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
@@ -179,17 +182,27 @@ class PolicyGradient:
         return
 
     def update_gpomdp(
-            self, reward_trajectory: np.array,
+            self, reward_vector: np.array,
             score_trajectory: np.array
     ) -> np.array:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_trajectory, axis=1)
-        reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
+        rolling_scores = np.cumsum(score_trajectory, axis=1) + 1e-10
+
+        if self.baselines == "avg":
+            b = np.mean(reward_vector, axis=1)
+        elif self.baselines == "peters":
+            b = (np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=1)) / np.sum(rolling_scores ** 2, axis=1)
+        else:
+            b = np.zeros(1)
+
+        reward_trajectory = (reward_vector[...,None] - b[:, np.newaxis, :]) * rolling_scores
+
         estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
+
         return estimated_gradient
 
     def update_best_theta(self, current_perf: np.float64) -> None:

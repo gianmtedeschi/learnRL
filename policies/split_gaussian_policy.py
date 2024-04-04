@@ -42,13 +42,13 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         # Additional attributes
         self.dim_state = dim_state
         self.dim_action = dim_action
-        self.tot_params = dim_action * dim_state
         self.multi_linear = multi_linear
         self.constant = constant
         self.std_decay = std_decay
         self.std_min = std_min
 
         self.history = history
+        self.tot_params = dim_action * dim_state
         return
 
     def draw_action(self, state) -> float:
@@ -73,7 +73,15 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         if self.std_dev == 0:
             return super().compute_score(state, action)
 
+        scores = np.zeros(self.tot_params)
         leaf = self.history.find_closest_leaf(state.item())
-        scores = (action - leaf.val[0]) / (self.std_dev ** 2)
 
+        for position, Node in enumerate(self.history.get_all_leaves()):
+            if leaf.val[0] == Node.val[0]:
+                scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
+            else:
+                scores[position] = 0
         return scores
+
+    def update_policy_params(self):
+        self.tot_params = len(self.history.get_all_leaves())

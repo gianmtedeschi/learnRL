@@ -54,7 +54,7 @@ class TrajectorySampler:
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
-        states = np.zeros(self.env.horizon, dtype=np.float64)
+        states = np.zeros((self.env.horizon, self.env.state_dim), dtype=np.float64)
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -79,7 +79,7 @@ class TrajectorySampler:
             # update the vectors of rewards scores and state
             rewards[t] = rew
             scores[t, :] = score
-            states[t] = state
+            states[t, :] = state
 
             if done:
                 if t < self.env.horizon - 1:
