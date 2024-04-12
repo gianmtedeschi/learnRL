@@ -8,6 +8,8 @@ from envs import *
 from policies import GaussianPolicy, SplitGaussianPolicy, LinearPolicy, DeepGaussian
 from algorithms import PolicyGradientSplit
 from algorithms import PolicyGradient
+from algorithms import PolicyGradientSplitAngles
+from algorithms import PolicyGradientSplitVM
 from data_processors import IdentityDataProcessor
 from art import *
 import torch
@@ -24,7 +26,7 @@ ENV = "lq"
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
 
-alg_selection = ["pg", "split"]
+alg_selection = ["pg", "split","split_angles","split_VM"]
 ALG = alg_selection[1]
 
 # environment
@@ -42,10 +44,19 @@ LR_STRATEGY = "constant"
 BASELINE = "peters"
 
 if ALG == "split":
-    dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/split/split_test_{ITE}_"
+    dir = f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split/split_test_{ITE}_"
     ESTIMATOR = "GPOMDP"
-else:
-    dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/pg/pg_test_{ITE}_"
+
+if ALG== "pg":
+    dir = f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/pg/pg_test_{ITE}_"
+    ESTIMATOR = "GPOMDP"
+
+if ALG=="split_angles":
+    dir= f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split_angles/split_angles_{ITE}_"
+    ESTIMATOR = "GPOMDP"
+
+if ALG=="split_VM":
+    dir= f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split_VM/split_VM_{ITE}_"
     ESTIMATOR = "GPOMDP"
 
 if LR_STRATEGY == "adam":
@@ -164,7 +175,7 @@ if ALG == "pg":
         baselines=None,
     )
     alg = PolicyGradient(**alg_parameters)
-else:
+if ALG=="split":
     alg_parameters = dict(
         lr=[INIT_LR],
         lr_strategy=LR_STRATEGY,
@@ -184,6 +195,48 @@ else:
         split_grid=split_grid
     )
     alg = PolicyGradientSplit(**alg_parameters)
+
+if ALG=="split_angles":
+    alg_parameters = dict(
+        lr=[INIT_LR],
+        lr_strategy=LR_STRATEGY,
+        estimator_type="GPOMDP",
+        initial_theta=[0] * tot_params,
+        ite=ITE,
+        batch_size=BATCH,
+        env=env,
+        policy=pol,
+        data_processor=dp,
+        directory=dir,
+        verbose=DEBUG,
+        natural=NATURAL,
+        checkpoint_freq=100,
+        n_jobs=N_JOBS_PARAM,
+        baselines=BASELINE,
+        split_grid=split_grid
+    )
+    alg = PolicyGradientSplitAngles(**alg_parameters)
+
+if ALG=="split_VM":
+    alg_parameters = dict(
+        lr=[INIT_LR],
+        lr_strategy=LR_STRATEGY,
+        estimator_type="GPOMDP",
+        initial_theta=[0] * tot_params,
+        ite=ITE,
+        batch_size=BATCH,
+        env=env,
+        policy=pol,
+        data_processor=dp,
+        directory=dir,
+        verbose=DEBUG,
+        natural=NATURAL,
+        checkpoint_freq=100,
+        n_jobs=N_JOBS_PARAM,
+        baselines=BASELINE,
+        split_grid=split_grid
+    )
+    alg = PolicyGradientSplitVM(**alg_parameters)
 
 if __name__ == "__main__":
     # Learn phase
