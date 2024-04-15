@@ -30,7 +30,7 @@ alg_selection = ["pg", "split","split_angles","split_VM"]
 ALG = alg_selection[3]
 
 # environment
-horizon = 10
+horizon = 100
 gamma = 0.99
 RENDER = False
 
