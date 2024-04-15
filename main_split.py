@@ -27,7 +27,7 @@ ENV = "lq"
 POL = "split_gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM"]
-ALG = alg_selection[3]
+ALG = alg_selection[2]
 
 # environment
 horizon = 50
@@ -40,7 +40,7 @@ NATURAL = False
 ITE = 100
 BATCH = 1000
 N_JOBS_PARAM = 8
-LR_STRATEGY = "adam"
+LR_STRATEGY = "constant"
 BASELINE = "peters"
 
 if ALG == "split":
