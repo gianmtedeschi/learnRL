@@ -540,7 +540,7 @@ class PolicyGradientSplitVM(PolicyGradient):
         }
 
         # Save the json
-        name = self.directory + "/split_angles_results.json"
+        name = self.directory + "/split_VM_results.json"
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
