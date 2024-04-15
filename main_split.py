@@ -40,7 +40,7 @@ NATURAL = False
 ITE = 100
 BATCH = 1000
 N_JOBS_PARAM = 8
-LR_STRATEGY = "constant"
+LR_STRATEGY = "adam"
 BASELINE = "peters"
 
 if ALG == "split":
