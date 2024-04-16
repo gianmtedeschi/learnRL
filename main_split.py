@@ -27,10 +27,10 @@ ENV = "lq"
 POL = "split_gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM"]
-ALG = alg_selection[3]
+ALG = alg_selection[1]
 
 # environment
-horizon = 10
+horizon = 75
 gamma = 0.99
 RENDER = False
 
@@ -40,7 +40,7 @@ NATURAL = False
 ITE = 100
 BATCH = 1000
 N_JOBS_PARAM = 8
-LR_STRATEGY = "adam"
+LR_STRATEGY = "constant"
 BASELINE = "peters"
 
 if ALG == "split":
@@ -120,7 +120,7 @@ elif POL == "split_gaussian":
         parameters=np.ones(tot_params),
         dim_state=s_dim,
         dim_action=a_dim,
-        std_dev=0.3,
+        std_dev=0.1,
         std_decay=0,
         std_min=1e-6,
         multi_linear=MULTI_LINEAR,
