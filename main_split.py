@@ -27,7 +27,7 @@ ENV = "lq"
 POL = "split_gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM"]
-ALG = alg_selection[1]
+ALG = alg_selection[2]
 
 # environment
 horizon = 75
