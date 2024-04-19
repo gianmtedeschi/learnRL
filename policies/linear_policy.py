@@ -39,7 +39,9 @@ class LinearPolicy(BasePolicy, ABC):
             err_msg = f"[LinPolicy] the state has not the same dimension of the parameter vector:"
             err_msg += f"{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
-        action = self.parameters @ state
+        
+        action = self.parameters @ np.array(state, ndmin=1)
+
         return action
 
     def reduce_exploration(self):

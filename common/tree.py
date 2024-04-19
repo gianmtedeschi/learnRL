@@ -1,197 +1,210 @@
+"""
+array nodi
+
+nodo --> id, id_l, id_r, val, id_father
+
+while loop --> if nodo.val[1] is None:
+"""
+
 import numpy as np
 import graphviz
 
 class Node:
-    def __init__(self, key, node_id, father=None):
-        self.left = None
-        self.right = None
-        self.val = key
+    def __init__(self, node_id, key=None, father=None):
+        self.id_left = None
+        self.id_right = None
+        self.val = key # [split, value]
         self.node_id = node_id
-        self.father = father
+        self.id_father = father
 
 
 class BinaryTree:
     def __init__(self):
-        self.root = None
+        # array of all nodes
+        self.nodes = np.array([Node(i) for i in range(1000)]) 
+        # array of boolean values, )True if the node is a leaf
+        self.is_leaf = np.zeros(1000, dtype=bool)
+        # counter of used nodes in the nodes structure
+        self.used = 0
 
-        # todo fix use dict
-        self.nodes = []
 
-    def insert(self, key, split=None):
-        node_id = len(self.nodes) + 1
-        if self.root is None:
-            self.root = Node([key, None], node_id)
-            self.nodes.append(self.root)
-        else:
-            self._insert_recursive_father(key, self.root, node_id, split)
+    def insert_root(self, val):
+        self.nodes[0].val = [val, None]
+        self.is_leaf[self.used] = True
+        self.used += 1
 
-    def _insert_recursive_father(self, key, root, node_id, split):
-        if root.val[1] is not None:
-            if split < root.val[1]:
-                self._insert_recursive_father(key, root.left, node_id, split)
+    def insert(self, val, id_father, split):
+        # adjust split point in case of scalar problems
+        if np.isscalar(split):
+            split = [0, split]
+
+        # update father node
+        self.nodes[id_father].val[1] = split
+        self.nodes[id_father].id_left = self.used
+        self.nodes[id_father].id_right = self.used + 1
+        self.is_leaf[id_father] = False
+
+        # add son nodes
+        # left
+        self.nodes[self.used].id_father = id_father
+        self.nodes[self.used].val = [val[0], None]
+        self.is_leaf[self.used] = True
+
+        # right
+        self.nodes[self.used + 1].id_father = id_father
+        self.nodes[self.used + 1].val = [val[1], None]
+        self.is_leaf[self.used + 1] = True
+
+
+        # increment used nodes by 2
+        self.used += 2
+
+    def find_region_leaf(self, state):
+        # begin from the root
+        current_node = 0
+
+        while(self.is_leaf[current_node] == False):
+            if self.find_direction(state, current_node) == 0: 
+                current_node = self.nodes[current_node].id_left
+                # self.to_list(self.nodes[current_node])
             else:
-                self._insert_recursive_father(key, root.right, node_id, split)
+                current_node = self.nodes[current_node].id_right
+                # self.to_list(self.nodes[current_node])
+
+        return self.nodes[current_node]
+
+    def find_direction(self, state, current_node):
+        """
+        Return the direction of the split based on the axis of the split point
+
+        state = current state observed
+        current_node = current node id
+
+        return 0 if the state is on the left of the split point
+        """
+        # split is described by the tuple [axis, value]
+        split = self.nodes[current_node].val[1]
+
+        # Check if state is a scalar
+        if np.isscalar(state) == 1:
+            state_value = state
         else:
-            self._insert_recursive_leaf(key, root, node_id, split)
+            state_value = state[split[0]]
 
-    def _insert_recursive_leaf(self, key, root, node_id, split):
-        # add split point
-        root.val = [split if v is None else v for v in root.val]
-
-        root.left = Node([key[0], None], node_id, root)
-        root.right = Node([key[1], None], node_id + 1, root)
-        self.nodes.append(root.left)
-        self.nodes.append(root.right)
-
-    def inorder_traversal(self, root):
-        result = []
-        if root:
-            result += self.inorder_traversal(root.left)
-            result.append((root.val, root.node_id))
-            result += self.inorder_traversal(root.right)
-        return result
-
-    def search(self, key):
-        return self._search_recursive(key, self.root) if self.root else False
-
-    def _search_recursive(self, key, root):
-        if root is None or root.val[0] == key:
-            return root is not None
-
-        if key < root.val[0]:
-            return self._search_recursive(key, root.left)
+        if state_value < split[1]:
+            # 0 is left
+            return 0
         else:
-            return self._search_recursive(key, root.right)
+            # 1 is right
+            return 1
 
-    def search_by_id(self, node_id):
-        return self._search_by_id_recursive(node_id, self.root) if self.root else None
+    def get_current_policy(self):
+        res = []
+        for Node in self.nodes:
+            if self.is_leaf[Node.node_id]:
+                res.append(Node.val[0])
 
-    def _search_by_id_recursive(self, node_id, root):
-        if root is None or root.node_id == node_id:
-            return root
-
-        left_result = self._search_by_id_recursive(node_id, root.left)
-        if left_result:
-            return left_result
-
-        return self._search_by_id_recursive(node_id, root.right)
-
-    def find_closest_leaf(self, key):
-        return self._find_closest_leaf(self.root, key)
-
-    def _find_closest_leaf(self, root, key):
-        if root.val[1] is None:
-            return root
-
-        if key < root.val[1]:
-            # left_result = self._find_closest_leaf(root.left, key)
-            # return left_result if left_result is not None else root
-            return self._find_closest_leaf(root.left, key)
-        else:
-            return self._find_closest_leaf(root.right, key)
-
-    # def find_associated_node(self, number):
-    #     return self._find_associated_node(self.root, number)
-    #
-    # def _find_associated_node(self, root, number):
-    #     if root is None:
-    #         return None
-    #
-    #     if root.val is None or number < root.val[1]:
-    #         return self._find_associated_node(root.left, number) or root
-    #     else:
-    #         return self._find_associated_node(root.right, number) or root
+        return res
 
     def get_all_leaves(self):
         res = []
         for Node in self.nodes:
-            if Node.val[1] is None:
+            if self.is_leaf[Node.node_id]:
                 res.append(Node)
 
         return res
+    
+    def get_region(self, node):
+        is_left = False
+        is_right = False
+        is_root = False
+        lb = -np.inf
+        ub = np.inf
 
-    def get_new_policy(self):
-        res = []
-        for Node in self.nodes:
-            if Node.val[1] is None:
-                res.append(Node.val[0].item())
+        if node.id_left is not None or node.id_right is not None:
+            print("[TREE POLICY] You are requesting a region for a non leaf!")
+            return None
 
-        return res
+        # case we are root
+        if node.id_father is None:
+            return [lb, ub]
+        
+        father_node = self.nodes[node.id_father]
+        while not ((is_left and is_right) or is_root):
+            if father_node.id_left == node.node_id and not is_left:
+                ub = father_node.val[1][1]
+                is_left = True
+            elif father_node.id_right == node.node_id and not is_right:
+                lb = father_node.val[1][1]
+                is_right = True
 
-    def get_father(self, node):
-        leaves = self.get_all_leaves()
-        res = None
-        for order, Node in enumerate(leaves):
-            if order == node:
-                res = Node.father
-                break
+            if father_node.id_father is None:
+                is_root = True
+            else:
+                node = father_node
+                father_node = self.nodes[father_node.id_father]
 
-        return res
+        return [lb, ub]
 
-    def print_inorder(self):
-        print("Inorder Traversal:", self.inorder_traversal(self.root))
+    # def print_inorder(self):
+    #     print("Inorder Traversal:", self.inorder_traversal(self.root))
 
-    def print_all_nodes(self):
-        print("All Nodes:")
-        for node in self.nodes:
-            print(f"Node ID: {node.node_id}, Value: {node.val}")
+    # def print_all_nodes(self):
+    #     print("All Nodes:")
+    #     for node in self.nodes:
+    #         print(f"Node ID: {node.node_id}, Value: {node.val}")
 
-    def print_tree(self, node=None, level=0, prefix="Root: "):
-        if node is None:
-            node = self.root
+    # def print_tree(self, node=None, level=0, prefix="Root: "):
+    #     if node is None:
+    #         node = self.root
 
-        stack = [(node, level, prefix)]
-        while stack:
-            node, level, prefix = stack.pop()
-            if node:
-                print(" " * (level * 5) + prefix + f"|- {node.val} ({node.node_id})")
-                stack.append((node.right, level + 1, " " * (level * 6) + "|- R: "))
-                stack.append((node.left, level + 1, " " * (level * 6) + "|- L: "))
+    #     stack = [(node, level, prefix)]
+    #     while stack:
+    #         node, level, prefix = stack.pop()
+    #         if node:
+    #             print(" " * (level * 5) + prefix + f"|- {node.val} ({node.node_id})")
+    #             stack.append((node.right, level + 1, " " * (level * 6) + "|- R: "))
+    #             stack.append((node.left, level + 1, " " * (level * 6) + "|- L: "))
 
     def _to_dot(self, node, dot):
         if node:
             dot.node(str(node.node_id), label=str(node.val))
-            if node.left:
-                dot.edge(str(node.node_id), str(node.left.node_id))
-                self._to_dot(node.left, dot)
-            if node.right:
-                dot.edge(str(node.node_id), str(node.right.node_id))
-                self._to_dot(node.right, dot)
+            if node.id_left is not None:
+                dot.edge(str(node.node_id), str(self.nodes[node.id_left].node_id))
+                self._to_dot(self.nodes[node.id_left], dot)
+            if node.id_right is not None:
+                dot.edge(str(node.node_id), str(self.nodes[node.id_right].node_id))
+                self._to_dot(self.nodes[node.id_right], dot)
 
     def to_png(self, filename='binary_tree.png'):
         dot = graphviz.Digraph(format='png')
-        self._to_dot(self.root, dot)
+        self._to_dot(self.nodes[0], dot)
         dot.render(filename, format='png', cleanup=True)
 
+    def to_list(self, node) -> None:
+        if node is None:
+            print('[TREE POLICY] Node is None')
+            return
+        
+        print(f'Node information:\n Node id: {node.node_id}\n Parameter: {node.val[0]}\n Split point: {node.val[1]}\n Is leaf: {self.is_leaf[node.node_id]}\n')
+    
 # Example usage:
 if __name__ == "__main__":
     tree = BinaryTree()
-    keys = [5, 2, 3, 4, 7]
+    tree.insert_root(0)
+    tree.insert([np.array(-1), np.array(1)], 0, [0, 0.5])
 
-    # tree.insert(keys[0])
-    # tree.insert(keys[1], 12)
-    # tree.insert(keys[2], 12)
-    #
-    # tree.print_tree()
 
-    for key in keys:
-        tree.insert(key, key + 1)
-    tree.print_tree()
+    # print(tree.get_current_policy())
+    # tree.to_list(tree.nodes[1])
 
-    # tree.print_inorder()
-    # tree.print_all_nodes()
+    # region = tree.get_region(tree.nodes[4])
+    # print(region)
 
-    # Example search
-    search_key = 4
-    if tree.search(search_key):
-        print(f"{search_key} is found in the tree.")
-    else:
-        print(f"{search_key} is not found in the tree.")
+    # region_leaf = tree.find_region_leaf([-1])
+    # tree.to_list(region_leaf)
 
-    associated_node_3 = tree.find_associated_node(4)
-    associated_node_0_9 = tree.find_associated_node(8)
-
-    print(f"\nNode associated with 3: {associated_node_3.val[0]}")
-    print(f"Node associated with 0.9: {associated_node_0_9.val[0]}")
-
-    tree.print_tree()
+    policy = np.array(tree.get_current_policy())
+    print(policy)
+    # tree.to_png()
+    
