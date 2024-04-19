@@ -35,7 +35,7 @@ gamma = 0.99
 RENDER = False
 
 # algorithm
-DEBUG = False
+DEBUG = True
 NATURAL = False
 ITE = 100
 BATCH = 1000

@@ -205,6 +205,7 @@ class PolicyGradientSplitVM(PolicyGradient):
                     self.policy.history.print_tree()
 
                 self.policy.history.to_png(f"policy_tree")
+                print("treeeeeeeeeee")
                 splits += 1
 
             # Log
