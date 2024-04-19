@@ -239,7 +239,7 @@ class LQ(BaseEnv):
         J /= n_random_x0
 
         print("test: ", P)
-        return min(0, J)
+        return min(0, J.all())
 
     def grad_K(self, K, Sigma):
         """

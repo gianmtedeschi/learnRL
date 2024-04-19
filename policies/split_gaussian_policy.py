@@ -53,15 +53,15 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
 
     def draw_action(self, state) -> float:
         if state.size != self.dim_state:
-            err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
-            err_msg += f"\n{len(state)} vs. {self.dim_state}"
+            err_msg = "[TreePolicy] the state has not the same dimension of the parameter vector:"
+            err_msg += f"\n{state.size} vs. {self.dim_state}"
             raise ValueError(err_msg)
 
         if self.history is None:
             mean = self.parameters
             action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
 
-        mean = self.history.find_closest_leaf(state.item())
+        mean = self.history.find_region_leaf(state.item())
         if mean is None:
             action = np.random.normal(self.history.root.val[0], np.identity(1) * self.std_dev)
         else:
@@ -74,7 +74,7 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
             return super().compute_score(state, action)
 
         scores = np.zeros(self.tot_params)
-        leaf = self.history.find_closest_leaf(state.item())
+        leaf = self.history.find_region_leaf(state.item())
 
         for position, Node in enumerate(self.history.get_all_leaves()):
             if leaf.val[0] == Node.val[0]:

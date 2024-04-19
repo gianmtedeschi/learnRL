@@ -363,7 +363,7 @@ class PolicyGradientSplitAngles(PolicyGradient):
 
     # todo fai moltiplicazione element wise, poi argmin e splitta e rigenera griglia solo su spazio parametro
     # todo con gradienti più negativi
-    def check_local_optima(self) -> None:
+    """ def check_local_optima(self) -> None:
         if len(self.gradient_history) <= 1:
             self.start_split = False
             return
@@ -399,6 +399,58 @@ class PolicyGradientSplitAngles(PolicyGradient):
                 print("Splitting on param side: ", res[best_region])
                 split_point = self.policy.history.get_father(best_region)
                 # self.split_grid = np.linspace(split_point.val[1], -split_point.val[1], 10)
+        else:
+            self.start_split = False """
+    
+    def check_local_optima(self, not_avg_gradient, n=20) -> None:
+        if len(self.gradient_history) <= n:
+            self.start_split = False
+            return
+
+        # Case where a split just happened so no need to check for local optima
+        # Reset gradient history to match the new number of parameters
+        if self.split_done:
+            self.start_split = False
+            self.split_done = False
+            self.gradient_history = []
+            return
+
+        mean = np.mean(self.gradient_history[-n:])
+        mean = np.linalg.norm(mean)
+        print("Gradient mean: ", mean)
+
+        if np.isclose(mean, 0, atol=0.5):
+            print(not_avg_gradient.shape)
+            var = np.var(not_avg_gradient, axis=0)
+            best_region = np.argmax(var)
+            print("Variance: ", var)
+
+            # scalar case
+            if var.size == 1:
+                self.start_split = True
+                
+                self.father_id = 0
+                self.splitting_param = self.policy.history.get_all_leaves()[0]
+                self.splitting_coordinate = 0
+                print("Optimal configuration found!")
+            
+            # multidimensional case
+            else:
+                self.start_split = True
+                print("Optimal configuration found!")
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
+                
+                # save father id for future insert
+                # usefull structures
+                self.father_id = self.policy.history.get_all_leaves()[best_region].node_id
+
+                print("Father id: ", self.father_id, self.policy.history.get_all_leaves()[best_region].id_father)
+                self.policy.history.to_list(self.policy.history.nodes[self.father_id])
+                
+                self.splitting_param = self.policy.history.get_all_leaves()[best_region]
+                self.splitting_coordinate = best_region
+
+            self.start_split = True
         else:
             self.start_split = False
     
