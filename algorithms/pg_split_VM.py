@@ -69,7 +69,7 @@ import os
 
 
 # Class Implementation
-class PolicyGradientSplitAngles(PolicyGradient):
+class PolicyGradientSplitVM(PolicyGradient):
     def __init__(
             self, lr: np.array = None,
             lr_strategy: str = "constant",
@@ -469,7 +469,7 @@ class PolicyGradientSplitAngles(PolicyGradient):
         angles = np.arccos(cos_angles)
         return angles
     
-def check_Von_Mises(self,angles):
+    def check_Von_Mises(self,angles):
         params= circ.vonmisesmle(angles)
         pvalue= stats.kstest(angles,"vonmises",args=(params[0],params[1]))[1]
         if pvalue< 0.1:
@@ -479,7 +479,7 @@ def check_Von_Mises(self,angles):
 
 
 
-def check_split(self, left, right, delta=0.1):
+    def check_split(self, left, right, delta=0.1):
         test= False
         angle = self.compute_angle(left, right)
         N= len(angle)
@@ -545,7 +545,7 @@ def check_split(self, left, right, delta=0.1):
     #     # print("test:", test, n)
     #     return (test < 0)
     
-def generate_grid(self, states_vector, num_samples=1) -> np.array:
+    def generate_grid(self, states_vector, num_samples=1) -> np.array:
         """
         Generate a grid of split points based on the occupancy of sampled trajectories.
 
@@ -568,7 +568,7 @@ def generate_grid(self, states_vector, num_samples=1) -> np.array:
         mask = (tmp_grid >= valid_region[0]) & (tmp_grid <= valid_region[1])
         self.split_grid = tmp_grid[mask]
 
-def check_local_optima(self, not_avg_gradient, n=20) -> None:
+    def check_local_optima(self, not_avg_gradient, n=20) -> None:
         if len(self.gradient_history) <= n:
             self.start_split = False
             return
@@ -620,7 +620,7 @@ def check_local_optima(self, not_avg_gradient, n=20) -> None:
         else:
             self.start_split = False
 
-def save_results(self) -> None:
+    def save_results(self) -> None:
         results = {
             "performance": np.array(self.performance_idx, dtype=float).tolist(),
             "best_theta": np.array(self.best_theta, dtype=float).tolist(),
