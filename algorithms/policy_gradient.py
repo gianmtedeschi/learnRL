@@ -138,7 +138,7 @@ class PolicyGradient:
                 estimated_gradient = np.mean(
                     perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
             elif self.estimator_type == "GPOMDP":
-                estimated_gradient = self.update_gpomdp(
+                estimated_gradient, _ = self.update_gpomdp(
                     reward_vector=reward_vector, score_trajectory=score_vector
                 )
             else:
@@ -188,22 +188,25 @@ class PolicyGradient:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_trajectory, axis=1) + 1e-10
+        rolling_scores = np.cumsum(score_trajectory, axis=1)  + 1e-10
 
+        
         if self.baselines == "avg":
-            b = np.mean(reward_vector, axis=1)
+            b = np.mean(reward_vector[...,None], axis=1)
         elif self.baselines == "peters":
-            b = (np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=1)) / np.sum(rolling_scores ** 2, axis=1)
+            b = np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=1) / np.sum(rolling_scores ** 2, axis=1)
         else:
             b = np.zeros(1)
 
         reward_trajectory = (reward_vector[...,None] - b[:, np.newaxis, :]) * rolling_scores
 
+        not_avg_gradient = np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1)
+        
         estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
 
-        return estimated_gradient
+        return estimated_gradient, not_avg_gradient
 
     def update_best_theta(self, current_perf: np.float64) -> None:
         if self.best_theta is None or self.best_performance_theta <= current_perf:

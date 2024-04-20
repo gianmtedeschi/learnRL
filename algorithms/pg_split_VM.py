@@ -29,6 +29,20 @@ todo --> from split return also the split point associated to the possible divis
         to understand who is the father of the 2 params
 """
 
+"""
+criterio convergenza: norma della media degli ultimi n gradienti è vicina a 0
+
+per scegliere regione guardo componente del gradiente con varianza più grande ---> varianza sulle traiettorie ---> prendo gradienti non mediati e faccio varianze colonne gradienti 
+
+sub sampling sui punti di split ?????
+
+se nessun punto e valido guardi seconda regione con varianza più grande
+
+nessun punto in nessuna regione ---> convergenza
+
+Crea struttura dati con varianza delle coordinate gradiente per mantenerti dove andare a cercare i punti 
+Crea una funzione find interval che ti restituisce gli estremi dell'intervallo di una regione --> guarda gli ultimi due padri
+"""
 
 
 # imports
@@ -43,7 +57,7 @@ from simulation.trajectory_sampler import TrajectorySampler
 import scipy
 import scipy.stats as stats
 import math 
-import astropy.stats as circ
+import astropy.stats.circstats as circ
 
 import json
 import io
@@ -55,7 +69,7 @@ import os
 
 
 # Class Implementation
-class PolicyGradientSplitVM(PolicyGradient):
+class PolicyGradientSplitAngles(PolicyGradient):
     def __init__(
             self, lr: np.array = None,
             lr_strategy: str = "constant",
@@ -72,7 +86,7 @@ class PolicyGradientSplitVM(PolicyGradient):
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             split_grid: np.array = None,
-            max_splits: int = 10,
+            max_splits: int = 100,
             baselines: str = None
     ) -> None:
         # Class' parameter with checks
@@ -105,9 +119,9 @@ class PolicyGradientSplitVM(PolicyGradient):
         assert data_processor is not None, err_msg
         self.data_processor = data_processor
 
-        err_msg = "[PG_split] split grid is None."
-        assert split_grid is not None, err_msg
-        self.split_grid = split_grid
+        # err_msg = "[PG_split] split grid is None."
+        # assert split_grid is not None, err_msg
+        # self.split_grid = split_grid
 
         os.makedirs(directory, exist_ok=True)
         self.directory = directory
@@ -123,6 +137,7 @@ class PolicyGradientSplitVM(PolicyGradient):
         # self.parallel_computation = bool(self.n_jobs != 1)
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
+        print("Dim state: ", self.dim_state)
 
         # Useful structures
         self.theta_history = dict.fromkeys([i for i in range(self.ite)], np.array(0))
@@ -143,10 +158,9 @@ class PolicyGradientSplitVM(PolicyGradient):
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam()
 
-        # self.policy_history = BinaryTree()
-        # self.policy_history.insert(self.thetas)
+        self.policy.history.insert_root(self.thetas)
+        self.splitting_param = self.policy.history.get_all_leaves()[0]
 
-        self.policy.history.insert(self.thetas)
         self.max_splits = max_splits
         self.split_done = False
         self.start_split = False
@@ -183,7 +197,10 @@ class PolicyGradientSplitVM(PolicyGradient):
 
             # Look for a split
             if splits < self.max_splits and self.start_split:
-                self.learn_split(score_vector, state_vector, reward_vector)
+                # Compute the split grid
+                self.generate_grid(states_vector=state_vector, num_samples=20)
+                print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
+                self.learn_split(score_vector[:,:,self.splitting_coordinate], state_vector, reward_vector)
 
             if not self.split_done:
                 # Compute the estimated gradient
@@ -191,7 +208,7 @@ class PolicyGradientSplitVM(PolicyGradient):
                     estimated_gradient = np.mean(
                         perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
                 elif self.estimator_type == "GPOMDP":
-                    estimated_gradient = self.update_gpomdp(
+                    estimated_gradient, not_avg_gradient = self.update_gpomdp(
                         reward_vector=reward_vector, score_trajectory=score_vector
                     )
                 else:
@@ -205,7 +222,6 @@ class PolicyGradientSplitVM(PolicyGradient):
                     self.policy.history.print_tree()
 
                 self.policy.history.to_png(f"policy_tree")
-                print("treeeeeeeeeee")
                 splits += 1
 
             # Log
@@ -234,16 +250,25 @@ class PolicyGradientSplitVM(PolicyGradient):
 
             # check if we reached an optimal configuration
             if splits < self.max_splits:
-                self.check_local_optima()
-
+                self.check_local_optima(not_avg_gradient)
         return
 
     def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
         traj = []
-        closest_leaf = self.policy.history.find_closest_leaf(split_state)
+
+        closest_leaf = self.policy.history.find_region_leaf(split_state)
+        valid_region = self.policy.history.get_region(self.splitting_param)
+
         traj_l, traj_r = 0, 0
-        score_left = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
-        score_right = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
+        # score_left = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
+        # score_right = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
+
+
+        score_left = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
+        score_right = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
+
+        mask = (state_vector >= valid_region[0]) & (state_vector <= valid_region[1])
+        filtered_state_vector = state_vector[mask]
 
         for i in range(len(state_vector)):
             for j in range(len(state_vector[i])):
@@ -260,12 +285,11 @@ class PolicyGradientSplitVM(PolicyGradient):
             traj_l = 0
             traj_r = 0
 
+
         reward_trajectory_left = np.sum(np.cumsum(score_left, axis=1) * reward_vector[...,None], axis=1)
         reward_trajectory_right = np.sum(np.cumsum(score_right, axis=1) * reward_vector[...,None], axis=1)
 
         estimated_gradient_left = np.mean(reward_trajectory_left)
-        print("DEBUGGING")
-        print(estimated_gradient_left)
         estimated_gradient_right = np.mean(reward_trajectory_right)
 
         estimated_gradient = [estimated_gradient_left, estimated_gradient_right]
@@ -297,7 +321,9 @@ class PolicyGradientSplitVM(PolicyGradient):
             thetas = res[SplitResults.SplitThetas]
 
             gradient_norm = np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1])
-
+            print("Point: ", self.split_grid[i])
+            print("Gradient mean:", estimated_gradient[0], estimated_gradient[1])
+            print("Thetas: ", thetas)
             # if self.check_split(reward_trajectory[0], reward_trajectory[1], trajectories, estimated_gradient[0], estimated_gradient[1]):
             if self.check_split(reward_trajectory[0], reward_trajectory[1]):
                 splits[self.split_grid[i]] = [thetas, True, gradient_norm]
@@ -323,14 +349,17 @@ class PolicyGradientSplitVM(PolicyGradient):
                 print("Split result: ", best_split_thetas)
                 print("Split state: ", best_split_state)
 
-            self.policy.history.insert(best_split_thetas, best_split_state.item())
+            # update tree policy
+            self.policy.history.insert(best_split_thetas, self.father_id, best_split_state.item())
+
             self.split_done = True
-            self.thetas = np.array(self.policy.history.get_new_policy())
+            self.thetas = np.array(self.policy.history.get_current_policy()).ravel()
+            print("New thetas: ", self.thetas)
             self.policy.update_policy_params()
             self.dim = len(self.thetas)
 
-            index = np.argwhere(self.split_grid == best_split_state)
-            self.split_grid = np.delete(self.split_grid, index)
+            # index = np.argwhere(self.split_grid == best_split_state)
+            # self.split_grid = np.delete(self.split_grid, index)
         else:
             print("No split found!")
 
@@ -339,10 +368,11 @@ class PolicyGradientSplitVM(PolicyGradient):
         old_theta = self.thetas
         # Update parameters
         if split_state is not None:
-            old_theta = self.policy.history.find_closest_leaf(split_state).val[0]
+            old_theta = self.policy.history.find_region_leaf(split_state).val[0]
 
         if self.lr_strategy == "constant":
             new_theta = old_theta + self.lr * estimated_gradient
+
         elif self.lr_strategy == "adam":
             adaptive_lr = self.adam_optimizer.next(estimated_gradient)
             new_theta = old_theta + adaptive_lr
@@ -359,51 +389,67 @@ class PolicyGradientSplitVM(PolicyGradient):
         res = np.multiply(left, right)
         var = np.var(res)
 
-        # print("Mean", np.mean(res))
-        # print("Var", var)
         return np.sqrt(var * 1.96)
 
     # todo fai moltiplicazione element wise, poi argmin e splitta e rigenera griglia solo su spazio parametro
     # todo con gradienti più negativi
-    def check_local_optima(self) -> None:
-        if len(self.gradient_history) <= 1:
-            self.start_split = False
-            return
+    # def check_local_optima(self) -> None:
+    #     if len(self.gradient_history) <= 1:
+    #         self.start_split = False
+    #         return
 
-        # Case where a split just happened so no need to check for local optima
-        # Reset gradient history to match the new number of parameters
-        if self.split_done:
-            self.start_split = False
-            self.split_done = False
-            self.gradient_history = []
-            return
+    #     # Case where a split just happened so no need to check for local optima
+    #     # Reset gradient history to match the new number of parameters
+    #     if self.split_done:
+    #         self.start_split = False
+    #         self.split_done = False
+    #         self.gradient_history = []
+    #         return
 
-        latest_two = self.gradient_history[-2:]
-        # res = np.multiply(latest_two[0], latest_two[1])
-        # res = np.dot(latest_two[0], latest_two[1])
-        #
-        # self.start_split = all(val < 0 for val in res)
-        #
-        # self.start_split = res < 0
-        # if self.start_split:
-        #     print("Optimal configuration found!")
-        if np.dot(latest_two[0], latest_two[1]) < 0:
-            res = np.multiply(latest_two[0], latest_two[1])
-            best_region = np.argmin(res)
+    #     latest_two = self.gradient_history[-2:]
+    #     # res = np.multiply(latest_two[0], latest_two[1])
+    #     # res = np.dot(latest_two[0], latest_two[1])
+    #     #
+    #     # self.start_split = all(val < 0 for val in res)
+    #     #
+    #     # self.start_split = res < 0
+    #     # if self.start_split:
+    #     #     print("Optimal configuration found!")
+    #     if np.dot(latest_two[0], latest_two[1]) < 0:
+    #         res = np.multiply(latest_two[0], latest_two[1])
+    #         best_region = np.argmin(res)
 
-            # print("AO ANNAMO***************: ", latest_two[0], latest_two[1], latest_two[0].dtype, latest_two[1].dtype)
-            if latest_two[0].size == 1:
-                self.start_split = True
-                print("Optimal configuration found!")
-            else:
-                self.start_split = True
-                print("Optimal configuration found!")
-                print("Splitting on param side: ", res[best_region])
-                split_point = self.policy.history.get_father(best_region)
-                # self.split_grid = np.linspace(split_point.val[1], -split_point.val[1], 10)
-        else:
-            self.start_split = False
+    #         # print("AO ANNAMO***************: ", latest_two[0], latest_two[1], latest_two[0].dtype, latest_two[1].dtype)
+    #         if latest_two[0].size == 1:
+    #             self.start_split = True
+    #             print("Optimal configuration found!")
+    #         else:
+    #             self.start_split = True
+    #             print("Optimal configuration found!")
+    #             print("Splitting on param side: ", res[best_region])
+    #             split_point = self.policy.history.get_father(best_region)
+    #             # self.split_grid = np.linspace(split_point.val[1], -split_point.val[1], 10)
+    #     else:
+    #         self.start_split = False
     
+    # def compute_p(self, left, right):
+    #     p = np.multiply(left, right)
+    #     return p
+
+    # def check_split(self, left, right, delta=0.3):
+    #     p = self.compute_p(left, right)
+    #     z = np.var(p)
+    #     sup = np.max(p)
+        
+    #     test = np.sqrt((2 * z * np.log(2/delta))/self.batch_size) + (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup) + - np.mean(p)
+    #     term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
+    #     term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
+    #     term3 = np.mean(p)
+
+    #     print("************************", term1, term2, term3)
+
+    #     return (test < 0)
+
     def compute_p(self, left, right):
         p = np.multiply(left, right)
         return p
@@ -423,7 +469,7 @@ class PolicyGradientSplitVM(PolicyGradient):
         angles = np.arccos(cos_angles)
         return angles
     
-    def check_Von_Mises(self,angles):
+def check_Von_Mises(self,angles):
         params= circ.vonmisesmle(angles)
         pvalue= stats.kstest(angles,"vonmises",args=(params[0],params[1]))[1]
         if pvalue< 0.1:
@@ -433,7 +479,7 @@ class PolicyGradientSplitVM(PolicyGradient):
 
 
 
-    def check_split(self, left, right, delta=0.1):
+def check_split(self, left, right, delta=0.1):
         test= False
         angle = self.compute_angle(left, right)
         N= len(angle)
@@ -476,6 +522,10 @@ class PolicyGradientSplitVM(PolicyGradient):
 
 
         return test
+
+    
+
+
     
     # todo dividi su tutto n e non
     # def check_split(self, left, right, n, grad_l, grad_r):
@@ -494,50 +544,90 @@ class PolicyGradientSplitVM(PolicyGradient):
     #     # print("c/n:", self.compute_const(left, right)/np.sqrt(n))
     #     # print("test:", test, n)
     #     return (test < 0)
-
-    def generate_grid(self, states_vector) -> None:
+    
+def generate_grid(self, states_vector, num_samples=1) -> np.array:
         """
-        Generate a grid of split points based on the states vector.
+        Generate a grid of split points based on the occupancy of sampled trajectories.
 
         Parameters:
-        states_vector (np.array): The states vector to generate the grid from.
+        states_vector (np.array): The matrix of sampled trajectories to generate the grid from.
 
         Returns:
         np.array: A grid of split points.
         """
-        for i in self.batch_size:
-            self.split_grid = np.append(self.split_grid, self.sample_states(states_vector[i], 1, 0.5))
-        
-    
-    def sample_states(self, state_vector, num_samples, gamma) -> np.float64:
-        """
-        Sample states from a state vector using a geometric distribution.
+        valid_region = self.policy.history.get_region(self.splitting_param)
+        print("Valid region: ", valid_region)
 
-        Parameters:
-        state_vector (np.array): The state vector to sample from.
-        num_samples (int): The number of samples to draw.
-        p (float): The 'success' probability parameter for the geometric distribution.
+        samples = np.random.geometric(1 - self.env.gamma, num_samples)
+        samples = np.clip(samples, 0, self.env.horizon - 1)
 
-        Returns:
-        np.array: An array of sampled states.
-        """
-        # Generate indices using a geometric distribution
-        indices = np.random.geometric(gamma, num_samples) - 1  # subtract 1 because geometric distribution starts at 1
+        points = np.linspace(0, num_samples - 1, num_samples, dtype=int) % self.batch_size
 
-        # Modulo operation to ensure indices are within the range of the state vector length
-        indices = indices % len(state_vector)
+        tmp_grid = states_vector[points, samples].ravel()
 
-        # Return the sampled states
-        return state_vector[indices]
+        mask = (tmp_grid >= valid_region[0]) & (tmp_grid <= valid_region[1])
+        self.split_grid = tmp_grid[mask]
 
-    def save_results(self) -> None:
+def check_local_optima(self, not_avg_gradient, n=20) -> None:
+        if len(self.gradient_history) <= n:
+            self.start_split = False
+            return
+
+        # Case where a split just happened so no need to check for local optima
+        # Reset gradient history to match the new number of parameters
+        if self.split_done:
+            self.start_split = False
+            self.split_done = False
+            self.gradient_history = []
+            return
+
+        mean = np.mean(self.gradient_history[-n:])
+        mean = np.linalg.norm(mean)
+        print("Gradient mean: ", mean)
+
+        if np.isclose(mean, 0, atol=0.5):
+            print(not_avg_gradient.shape)
+            var = np.var(not_avg_gradient, axis=0)
+            best_region = np.argmax(var)
+            print("Variance: ", var)
+
+            # scalar case
+            if var.size == 1:
+                self.start_split = True
+                
+                self.father_id = 0
+                self.splitting_param = self.policy.history.get_all_leaves()[0]
+                self.splitting_coordinate = 0
+                print("Optimal configuration found!")
+            
+            # multidimensional case
+            else:
+                self.start_split = True
+                print("Optimal configuration found!")
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
+                
+                # save father id for future insert
+                # usefull structures
+                self.father_id = self.policy.history.get_all_leaves()[best_region].node_id
+
+                print("Father id: ", self.father_id, self.policy.history.get_all_leaves()[best_region].id_father)
+                self.policy.history.to_list(self.policy.history.nodes[self.father_id])
+                
+                self.splitting_param = self.policy.history.get_all_leaves()[best_region]
+                self.splitting_coordinate = best_region
+
+            self.start_split = True
+        else:
+            self.start_split = False
+
+def save_results(self) -> None:
         results = {
             "performance": np.array(self.performance_idx, dtype=float).tolist(),
             "best_theta": np.array(self.best_theta, dtype=float).tolist(),
             "thetas_history": list(value.tolist() for value in self.theta_history.values()),
             "last_theta": np.array(self.thetas, dtype=float).tolist(),
             "best_perf": float(self.best_performance_theta),
-            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
+            # "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
         }
 
         # Save the json
@@ -546,3 +636,11 @@ class PolicyGradientSplitVM(PolicyGradient):
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
         return
+    
+
+
+
+
+
+
+
