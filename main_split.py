@@ -27,17 +27,17 @@ ENV = "lq"
 POL = "split_gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM"]
-ALG = alg_selection[3]
+ALG = alg_selection[1]
 
 # environment
-horizon = 75
+horizon = 50
 gamma = 0.99
 RENDER = False
 
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 100
+ITE = 200
 BATCH = 1000
 N_JOBS_PARAM = 8
 LR_STRATEGY = "constant"
