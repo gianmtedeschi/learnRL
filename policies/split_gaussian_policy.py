@@ -48,20 +48,15 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         self.std_min = std_min
 
         self.history = history
-        self.tot_params = dim_action * dim_state
+        self.tot_params = dim_action
         return
 
     def draw_action(self, state) -> float:
-        if state.size != self.dim_state:
-            err_msg = "[TreePolicy] the state has not the same dimension of the parameter vector:"
-            err_msg += f"\n{state.size} vs. {self.dim_state}"
-            raise ValueError(err_msg)
-
         if self.history is None:
             mean = self.parameters
             action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
 
-        mean = self.history.find_region_leaf(state.item())
+        mean = self.history.find_region_leaf(state)
         if mean is None:
             action = np.random.normal(self.history.root.val[0], np.identity(1) * self.std_dev)
         else:
@@ -72,15 +67,22 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:
             return super().compute_score(state, action)
-
+        
+        #TODO fix scores dimension for parametrization with more than one parameter
         scores = np.zeros(self.tot_params)
-        leaf = self.history.find_region_leaf(state.item())
+        leaf = self.history.find_region_leaf(state)
+        # print("YOOOOOOOO", len(self.history.get_all_leaves()), leaf.val[0], self.tot_params)
 
         for position, Node in enumerate(self.history.get_all_leaves()):
-            if leaf.val[0] == Node.val[0]:
+            if leaf.val[0].all() == Node.val[0].all():
                 scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
             else:
                 scores[position] = 0
+            
+            if True:
+                scores[position] = np.ravel(scores[position])
+
+        # print(scores)
         return scores
 
     def update_policy_params(self):

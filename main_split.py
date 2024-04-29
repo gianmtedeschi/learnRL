@@ -19,7 +19,7 @@ import json
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole"]
-ENV = "lq"
+ENV = "cartpole"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -28,25 +28,25 @@ alg_selection = ["pg", "split"]
 ALG = alg_selection[1]
 
 # environment
-horizon = 10
-gamma = 0.99
+horizon = 100
+gamma = 0.999
 RENDER = False
 
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 100
-BATCH = 1000
+ITE = 1000
+BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "constant"
-BASELINE = "peters"
+BASELINE = "avg"
 
 if ALG == "split":
     dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/split/split_test_{ITE}_"
     ESTIMATOR = "GPOMDP"
 else:
     dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/pg/pg_test_{ITE}_"
-    ESTIMATOR = "GPOMDP"
+    ESTIMATOR = "REINFORCE"
 
 if LR_STRATEGY == "adam":
     INIT_LR = 1e-3
@@ -66,7 +66,7 @@ if ENV == "lq":
     dir += f"lq_{horizon}_"
 elif ENV == "cartpole":
     env_class = ContCartPole
-    env = ContCartPole(horizon=horizon, gamma=gamma, render=RENDER)
+    env = ContCartPole(horizon=horizon, gamma=gamma)
     dir += f"cartpole_{horizon}_"
 else:
     raise NotImplementedError
@@ -75,8 +75,6 @@ s_dim = env.state_dim
 a_dim = env.action_dim
 MULTI_LINEAR = False
 
-split_grid = np.linspace(env.max_pos, -env.max_pos, 50)
-split_grid = np.append(split_grid, np.array(0))
 
 """Data Processor"""
 dp = IdentityDataProcessor()
@@ -105,6 +103,7 @@ elif POL == "gaussian":
     )
     dir += f"lingauss_policy_{tot_params}_var_01"
 elif POL == "split_gaussian":
+    tot_params = a_dim
     pol = SplitGaussianPolicy(
         parameters=np.ones(tot_params),
         dim_state=s_dim,
@@ -181,14 +180,12 @@ else:
         checkpoint_freq=100,
         n_jobs=N_JOBS_PARAM,
         baselines=BASELINE,
-        split_grid=split_grid
+        split_grid=None
     )
     alg = PolicyGradientSplit(**alg_parameters)
 
 if __name__ == "__main__":
     # Learn phase
-    print("GRIGLIA", split_grid)
-
     print(text2art("== LQ =="))
     if MODE in ["learn", "learn_test"]:
         print(text2art("Learn Start"))
@@ -199,6 +196,7 @@ if __name__ == "__main__":
     # Test phase
     # todo aggiusta il fatto dello 0 e vedi di mettere il std decay
     # todo to clip or not to clip
+    j = []
     if MODE in ["test", "learn_test"]:
         print(text2art("== TEST =="))
         env = env_class(horizon=horizon, gamma=gamma)
@@ -214,4 +212,6 @@ if __name__ == "__main__":
             for i in range(test_ite):
                 state, rew, _, _ = env.step(action=pol.draw_action(state))
                 r += (gamma ** i) * rew
+            j.append(r)
             print(f"PERFORMANCE: {r}")
+        print(f"MEAN PERFORMANCE: {np.mean(j)}")

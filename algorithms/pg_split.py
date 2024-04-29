@@ -102,6 +102,7 @@ class PolicyGradientSplit(PolicyGradient):
         assert initial_theta is not None, err_msg
         self.thetas = np.array(initial_theta)
         self.dim = len(self.thetas)
+        print(self.thetas, self.dim)
 
         err_msg = "[PG_split] env is None."
         assert env is not None, err_msg
@@ -194,7 +195,7 @@ class PolicyGradientSplit(PolicyGradient):
             # Look for a split
             if splits < self.max_splits and self.start_split:
                 # Compute the split grid
-                self.generate_grid(states_vector=state_vector, num_samples=20)
+                self.generate_grid(states_vector=state_vector, axis=None, num_samples=20)
                 print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
                 self.learn_split(score_vector[:,:,self.splitting_coordinate], state_vector, reward_vector)
 
@@ -253,7 +254,6 @@ class PolicyGradientSplit(PolicyGradient):
         traj = []
 
         closest_leaf = self.policy.history.find_region_leaf(split_state)
-        valid_region = self.policy.history.get_region(self.splitting_param)
 
         traj_l, traj_r = 0, 0
         # score_left = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
@@ -263,16 +263,13 @@ class PolicyGradientSplit(PolicyGradient):
         score_left = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
         score_right = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
 
-        mask = (state_vector >= valid_region[0]) & (state_vector <= valid_region[1])
-        filtered_state_vector = state_vector[mask]
-
         for i in range(len(state_vector)):
             for j in range(len(state_vector[i])):
-                if state_vector[i][j] < split_state and (
+                if state_vector[i][j].all() < split_state.all() and (
                         closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] >= closest_leaf.val[1]):
                     score_left[i, j, :] = score_vector[i][j]
                     traj_l += 1
-                elif state_vector[i][j] >= split_state and (
+                elif state_vector[i][j].all() >= split_state.all() and (
                         closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] <= closest_leaf.val[1]):
                     score_right[i, j, :] = score_vector[i][j]
                     traj_r += 1
@@ -504,7 +501,7 @@ class PolicyGradientSplit(PolicyGradient):
     #     # print("test:", test, n)
     #     return (test < 0)
     
-    def generate_grid(self, states_vector, num_samples=1) -> np.array:
+    def generate_grid(self, states_vector, axis, num_samples=1) -> np.array:
         """
         Generate a grid of split points based on the occupancy of sampled trajectories.
 
@@ -514,7 +511,7 @@ class PolicyGradientSplit(PolicyGradient):
         Returns:
         np.array: A grid of split points.
         """
-        valid_region = self.policy.history.get_region(self.splitting_param)
+        valid_region = self.policy.history.get_region(self.splitting_param, self.dim_state)
         print("Valid region: ", valid_region)
 
         samples = np.random.geometric(1 - self.env.gamma, num_samples)
@@ -522,10 +519,18 @@ class PolicyGradientSplit(PolicyGradient):
 
         points = np.linspace(0, num_samples - 1, num_samples, dtype=int) % self.batch_size
 
-        tmp_grid = states_vector[points, samples].ravel()
-
-        mask = (tmp_grid >= valid_region[0]) & (tmp_grid <= valid_region[1])
-        self.split_grid = tmp_grid[mask]
+        # tmp_grid = states_vector[points, samples].ravel()
+        tmp_grid = states_vector[points, samples]
+        print("Temp split grid:", tmp_grid)
+        
+        mask = np.zeros((num_samples, self.dim_state), dtype=bool)
+        for j in range(num_samples):
+            for i in range(self.dim_state):
+                mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1])
+        
+        # mask = (tmp_grid >= valid_region[0]) & (tmp_grid <= valid_region[1])
+        print(mask)
+        self.split_grid = tmp_grid * mask 
 
     def check_local_optima(self, not_avg_gradient, n=20) -> None:
         if len(self.gradient_history) <= n:
