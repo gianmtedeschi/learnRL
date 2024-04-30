@@ -320,10 +320,10 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             print("Thetas: ", thetas)
             # if self.check_split(reward_trajectory[0], reward_trajectory[1], trajectories, estimated_gradient[0], estimated_gradient[1]):
             if self.check_split(reward_trajectory[0], reward_trajectory[1]):
-                splits[self.split_grid[i]] = [thetas, True, gradient_norm]
+                splits[tuple(self.split_grid[i])] = [thetas, True, gradient_norm]
 
             else:
-                splits[self.split_grid[i]] = [thetas, False, gradient_norm]
+                splits[tuple(self.split_grid[i])] = [thetas, False, gradient_norm]
 
             # print("norm left: ", np.linalg.norm(grad_tmp[0]))
             # print("norm right: ", np.linalg.norm(grad_tmp[1]))
@@ -337,7 +337,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             split = max(valid_splits.items(), key=lambda x: x[1][2])
 
             best_split_thetas = split[1][0]
-            best_split_state = split[0]
+            best_split_state = np.array(split[0])
 
             if self.verbose:
                 print("Split result: ", best_split_thetas)
@@ -531,7 +531,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
                 mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1]) 
 
         for i in range(self.dim_state):
-            if i !=axis - 1 and abs(tmp_grid[i])>0:
+            if i !=axis  and abs(tmp_grid[i])>0:
                 mask[i,:]=False
 
         
