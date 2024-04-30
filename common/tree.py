@@ -86,7 +86,7 @@ class BinaryTree:
         split = self.nodes[current_node].val[1]
 
         # Check if state is a scalar
-        if np.isscalar(state) == 1:
+        if state.size == 1:
             state_value = state
         else:
             state_value = state[split[0]]
@@ -114,37 +114,42 @@ class BinaryTree:
 
         return res
     
-    def get_region(self, node):
-        is_left = False
-        is_right = False
-        is_root = False
-        lb = -np.inf
-        ub = np.inf
+    def get_region(self, node, dim_state):
+        region = np.zeros((dim_state, 2))
+        for i in range(dim_state):
+            is_left = False
+            is_right = False
+            is_root = False
+            lb = -np.inf
+            ub = np.inf
 
-        if node.id_left is not None or node.id_right is not None:
-            print("[TREE POLICY] You are requesting a region for a non leaf!")
-            return None
+            if node.id_left is not None or node.id_right is not None:
+                print("[TREE POLICY] You are requesting a region for a non leaf!")
+                return None
 
-        # case we are root
-        if node.id_father is None:
-            return [lb, ub]
-        
-        father_node = self.nodes[node.id_father]
-        while not ((is_left and is_right) or is_root):
-            if father_node.id_left == node.node_id and not is_left:
-                ub = father_node.val[1][1]
-                is_left = True
-            elif father_node.id_right == node.node_id and not is_right:
-                lb = father_node.val[1][1]
-                is_right = True
+            # case we are root
+            if node.id_father is None:
+                region[i] = [lb, ub]
+                continue
+            
+            father_node = self.nodes[node.id_father]
+            while not ((is_left and is_right) or is_root):
+                if father_node.id_left == node.node_id and not is_left:
+                    ub = father_node.val[1][1]
+                    is_left = True
+                elif father_node.id_right == node.node_id and not is_right:
+                    lb = father_node.val[1][1]
+                    is_right = True
 
-            if father_node.id_father is None:
-                is_root = True
-            else:
-                node = father_node
-                father_node = self.nodes[father_node.id_father]
+                if father_node.id_father is None:
+                    is_root = True
+                else:
+                    node = father_node
+                    father_node = self.nodes[father_node.id_father]
+            
+            region[i] = [lb, ub]
 
-        return [lb, ub]
+        return region
 
     # def print_inorder(self):
     #     print("Inorder Traversal:", self.inorder_traversal(self.root))
@@ -179,7 +184,7 @@ class BinaryTree:
     def to_png(self, filename='binary_tree.png'):
         dot = graphviz.Digraph(format='png')
         self._to_dot(self.nodes[0], dot)
-        dot.render(filename=filename,directory=f'/Users/Admin/OneDrive/Documenti/GitHub/learnRL', format='png', cleanup=True)
+        dot.render(filename, format='png', cleanup=True)
 
     def to_list(self, node) -> None:
         if node is None:

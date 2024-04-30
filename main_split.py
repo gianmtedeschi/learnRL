@@ -10,6 +10,7 @@ from algorithms import PolicyGradientSplit
 from algorithms import PolicyGradient
 from algorithms import PolicyGradientSplitAngles
 from algorithms import PolicyGradientSplitVM
+from algorithms import PolicyGradientSplitMultiDim
 from data_processors import IdentityDataProcessor
 from art import *
 import torch
