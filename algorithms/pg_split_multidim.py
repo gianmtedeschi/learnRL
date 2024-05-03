@@ -344,7 +344,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
                 print("Split state: ", best_split_state)
 
             # update tree policy
-            self.policy.history.insert(best_split_thetas, self.father_id, best_split_state.item())
+            self.policy.history.insert(best_split_thetas, self.father_id, best_split_state)
 
             self.split_done = True
             self.thetas = np.array(self.policy.history.get_current_policy()).ravel()
@@ -602,7 +602,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         }
 
         # Save the json
-        name = self.directory + "/split_results.json"
+        name = self.directory + "/split_md_results.json"
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
