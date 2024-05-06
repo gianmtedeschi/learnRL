@@ -54,6 +54,9 @@ from algorithms import PolicyGradient
 from common.utils import TrajectoryResults, SplitResults
 from common.tree import BinaryTree, Node
 from simulation.trajectory_sampler import TrajectorySampler
+import scipy
+import scipy.stats as stats
+import math
 
 import json
 import io
@@ -63,6 +66,9 @@ from adam.adam import Adam
 
 import os
 import time
+
+
+
 
 
 # Class Implementation

@@ -124,9 +124,9 @@ class BinaryTree:
             lb = -np.inf
             ub = np.inf
 
-            if node.id_left is not None or node.id_right is not None:
-                print("[TREE POLICY] You are requesting a region for a non leaf!")
-                return None
+            # if node.id_left is not None or node.id_right is not None:
+            #     print("[TREE POLICY] You are requesting a region for a non leaf!")
+            #     return None
 
             # case we are root
             if node.id_father is None:

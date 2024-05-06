@@ -11,6 +11,7 @@ from algorithms import PolicyGradient
 from algorithms import PolicyGradientSplitAngles
 from algorithms import PolicyGradientSplitVM
 from algorithms import PolicyGradientSplitMultiDim
+from algorithms import PolicyGradientSplitMultiDimAngles
 from data_processors import IdentityDataProcessor
 from art import *
 import torch
@@ -31,7 +32,7 @@ alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angl
 ALG = alg_selection[5]
 
 # environment
-horizon = 50
+horizon = 75
 gamma = 0.999
 RENDER = False
 
@@ -272,7 +273,7 @@ if ALG=="split_multi_dim":
     )
     alg = PolicyGradientSplitMultiDim(**alg_parameters)
 
-if ALG=="split_angles_multi_dim":
+if ALG=="angles_multi_dim":
     alg_parameters = dict(
         lr=[INIT_LR],
         lr_strategy=LR_STRATEGY,
