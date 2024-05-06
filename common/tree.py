@@ -13,7 +13,7 @@ class Node:
     def __init__(self, node_id, key=None, father=None):
         self.id_left = None
         self.id_right = None
-        self.val = key # [split, value]
+        self.val = key # [value, split]
         self.node_id = node_id
         self.id_father = father
 
@@ -33,7 +33,7 @@ class BinaryTree:
         self.is_leaf[self.used] = True
         self.used += 1
 
-    def insert(self, val, id_father, split):
+    def insert(self, param, id_father, split):
         # adjust split point in case of scalar problems
         if np.isscalar(split):
             split = [0, split]
@@ -47,12 +47,12 @@ class BinaryTree:
         # add son nodes
         # left
         self.nodes[self.used].id_father = id_father
-        self.nodes[self.used].val = [val[0], None]
+        self.nodes[self.used].val = [param[0], None]
         self.is_leaf[self.used] = True
 
         # right
         self.nodes[self.used + 1].id_father = id_father
-        self.nodes[self.used + 1].val = [val[1], None]
+        self.nodes[self.used + 1].val = [param[1], None]
         self.is_leaf[self.used + 1] = True
 
 
@@ -114,6 +114,7 @@ class BinaryTree:
 
         return res
     
+    """maggiore coppia x y minimi e minore x y massimi su possibile nuova foglia"""
     def get_region(self, node, dim_state):
         region = np.zeros((dim_state, 2))
         for i in range(dim_state):
@@ -150,6 +151,30 @@ class BinaryTree:
             region[i] = [lb, ub]
 
         return region
+    
+    def get_lower_vertex(self, node, split_point, dim_state):
+        axis = split_point[0]
+        point = split_point[1]
+
+        vertex = np.zeros(dim_state)
+        region = self.get_region(node, dim_state)
+
+        for i in range(dim_state):
+            vertex[i] = region[i][0]
+
+        return vertex
+    
+    def get_upper_vertex(self, node, split_point, dim_state):
+        axis = split_point[0]
+        point = split_point[1]
+        
+        vertex = np.zeros(dim_state)
+        region = self.get_region(node, dim_state)
+
+        for i in range(dim_state):
+            vertex[i] = region[i][1]
+
+        return vertex
 
     # def print_inorder(self):
     #     print("Inorder Traversal:", self.inorder_traversal(self.root))
