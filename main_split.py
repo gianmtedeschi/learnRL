@@ -21,7 +21,7 @@ import json
 # general
 MODE = "learn_test"
 
-# env_selection = ["lq", "swimmer", "cartpole"]
+# env_selection = ["lq", "swimmer", "cartpole","mountain_car"]
 ENV = "cartpole"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
@@ -79,6 +79,11 @@ if ENV == "lq":
     env_class = LQ
     env = LQ(horizon=horizon, gamma=gamma)
     dir += f"lq_{horizon}_"
+if ENV=="mountain_car":
+    env_class=Continuous_MountainCarEnv
+    env= Continuous_MountainCarEnv(horizon=horizon,gamma=gamma)
+    dir +=f"mountaincar_{horizon}_"
+
 elif ENV == "cartpole":
     env_class = ContCartPole
     env = ContCartPole(horizon=horizon, gamma=gamma)
@@ -118,7 +123,10 @@ elif POL == "gaussian":
         multi_linear=MULTI_LINEAR
     )
     dir += f"lingauss_policy_{tot_params}_var_01"
+
+
 elif POL == "split_gaussian":
+    tot_params = a_dim
     pol = SplitGaussianPolicy(
         parameters=np.ones(tot_params),
         dim_state=s_dim,
