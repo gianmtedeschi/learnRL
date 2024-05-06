@@ -75,7 +75,7 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
 
         for position, Node in enumerate(self.history.get_all_leaves()):
             if leaf.val[0].all() == Node.val[0].all():
-                scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
+                scores[position] = np.ravel((action -leaf.val[0]) / (self.std_dev ** 2))
             else:
                 scores[position] = 0
             

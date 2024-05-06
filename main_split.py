@@ -22,7 +22,7 @@ import json
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole"]
-ENV = "lq"
+ENV = "cartpole"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -31,15 +31,15 @@ alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim"]
 ALG = alg_selection[4]
 
 # environment
-horizon = 100
+horizon = 50
 gamma = 0.999
 RENDER = False
 
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 1000
-BATCH = 100
+ITE = 100
+BATCH = 1000
 N_JOBS_PARAM = 8
 LR_STRATEGY = "constant"
 BASELINE = "avg"
@@ -81,7 +81,7 @@ if ENV == "lq":
     dir += f"lq_{horizon}_"
 elif ENV == "cartpole":
     env_class = ContCartPole
-    env = ContCartPole(horizon=horizon, gamma=gamma, render=RENDER)
+    env = ContCartPole(horizon=horizon, gamma=gamma)
     dir += f"cartpole_{horizon}_"
 else:
     raise NotImplementedError
@@ -90,8 +90,7 @@ s_dim = env.state_dim
 a_dim = env.action_dim
 MULTI_LINEAR = False
 
-split_grid = np.linspace(env.max_pos, -env.max_pos, 50)
-split_grid = np.append(split_grid, np.array(0))
+
 
 """Data Processor"""
 dp = IdentityDataProcessor()
@@ -196,7 +195,7 @@ if ALG=="split":
         checkpoint_freq=100,
         n_jobs=N_JOBS_PARAM,
         baselines=BASELINE,
-        split_grid=split_grid
+        split_grid=None
     )
     alg = PolicyGradientSplit(**alg_parameters)
 
@@ -217,7 +216,7 @@ if ALG=="split_angles":
         checkpoint_freq=100,
         n_jobs=N_JOBS_PARAM,
         baselines=BASELINE,
-        split_grid=split_grid
+        split_grid=None
     )
     alg = PolicyGradientSplitAngles(**alg_parameters)
 
@@ -238,7 +237,7 @@ if ALG=="split_VM":
         checkpoint_freq=100,
         n_jobs=N_JOBS_PARAM,
         baselines=BASELINE,
-        split_grid=split_grid
+        split_grid=None
     )
     alg = PolicyGradientSplitVM(**alg_parameters)
 
@@ -259,15 +258,14 @@ if ALG=="split_multi_dim":
         checkpoint_freq=100,
         n_jobs=N_JOBS_PARAM,
         baselines=BASELINE,
-        split_grid=split_grid
+        split_grid=None
     )
     alg = PolicyGradientSplitMultiDim(**alg_parameters)
 
 
 if __name__ == "__main__":
     # Learn phase
-    print("GRIGLIA", split_grid)
-
+    
     print(text2art("== LQ =="))
     if MODE in ["learn", "learn_test"]:
         print(text2art("Learn Start"))

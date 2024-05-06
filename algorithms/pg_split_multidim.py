@@ -52,7 +52,7 @@ from policies import BasePolicy, GaussianPolicy, SplitGaussianPolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms import PolicyGradient
 from common.utils import TrajectoryResults, SplitResults
-from common.tree import BinaryTree
+from common.tree import BinaryTree, Node
 from simulation.trajectory_sampler import TrajectorySampler
 
 import json
@@ -62,6 +62,7 @@ import copy
 from adam.adam import Adam
 
 import os
+import time
 
 
 # Class Implementation
@@ -168,6 +169,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
     def learn(self) -> None:
         """Learning function"""
         splits = 0
+        axis = 0
         for i in tqdm(range(self.ite)):
             res = []
 
@@ -194,11 +196,18 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
 
             # Look for a split
             if splits < self.max_splits and self.start_split:
-                for k in range(self.dim_state):
-                  # Compute the split grid
-                  self.generate_grid(states_vector=state_vector, axis=k, num_samples=20)
-                  print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
-                  self.learn_split(score_vector[:,:,self.splitting_coordinate], state_vector, reward_vector)
+                # Choose the split axis
+                if axis == self.dim_state:
+                    axis = 0
+                # Compute the split grid
+                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=20)
+                print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
+                
+                # Start the split procedure
+                self.learn_split(score_vector[:,:,self.splitting_coordinate], state_vector, reward_vector, axis)
+
+                # Update axis for next iteration
+                axis += 1
 
             if not self.split_done:
                 # Compute the estimated gradient
@@ -255,6 +264,30 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         traj = []
 
         closest_leaf = self.policy.history.find_region_leaf(split_state)
+        lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, split_state, self.dim_state)
+        upper_vertex = self.policy.history.get_upper_vertex(closest_leaf, split_state, self.dim_state)
+
+        left_upper = np.zeros(self.dim_state)
+        left_lower = np.zeros(self.dim_state)
+        right_upper = np.zeros(self.dim_state)
+        right_lower = np.zeros(self.dim_state)
+
+        left_lower = lower_vertex
+        for i in range(self.dim_state):
+            left_upper[i] = upper_vertex[i]
+            if i == split_state[0]:
+                left_upper[i] = split_state[1]
+        
+        right_upper = upper_vertex
+        for i in range(self.dim_state):
+            right_lower[i] = lower_vertex[i]
+            if i == split_state[0]:
+                right_lower[i] = split_state[1]
+        
+        
+        # print("Destra:", right_lower, right_upper)
+        # print("Sinistra:", left_lower, left_upper)
+
 
         traj_l, traj_r = 0, 0
         # score_left = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
@@ -264,14 +297,24 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         score_left = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
         score_right = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
 
+        # for i in range(len(state_vector)):
+        #     for j in range(len(state_vector[i])):
+        #         # TODO cambia if basandola su vertici regione
+        #         if state_vector[i][j].all() < split_state.all() and (
+        #                 closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] >= closest_leaf.val[1]):
+        #             score_left[i, j, :] = score_vector[i][j]
+        #             traj_l += 1
+        #         elif state_vector[i][j].all() >= split_state.all() and (
+        #                 closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] <= closest_leaf.val[1]):
+        #             score_right[i, j, :] = score_vector[i][j]
+        #             traj_r += 1
+        
         for i in range(len(state_vector)):
             for j in range(len(state_vector[i])):
-                if state_vector[i][j].all() < split_state.all() and (
-                        closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] >= closest_leaf.val[1]):
+                if np.all(state_vector[i][j] > left_lower) and np.all(state_vector[i][j] <= left_upper):
                     score_left[i, j, :] = score_vector[i][j]
                     traj_l += 1
-                elif state_vector[i][j].all() >= split_state.all() and (
-                        closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] <= closest_leaf.val[1]):
+                elif np.all(state_vector[i][j] > right_lower) and np.all(state_vector[i][j] <= right_upper):
                     score_right[i, j, :] = score_vector[i][j]
                     traj_r += 1
 
@@ -282,6 +325,9 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
 
         reward_trajectory_left = np.sum(np.cumsum(score_left, axis=1) * reward_vector[...,None], axis=1)
         reward_trajectory_right = np.sum(np.cumsum(score_right, axis=1) * reward_vector[...,None], axis=1)
+
+        # print("Reward trajectory left: ", reward_trajectory_left)
+        # print("Reward trajectory right: ", reward_trajectory_right)
 
         estimated_gradient_left = np.mean(reward_trajectory_left)
         estimated_gradient_right = np.mean(reward_trajectory_right)
@@ -301,13 +347,13 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         traj = [traj_l, traj_r]
         return [estimated_gradient, reward_trajectory, new_thetas, traj]
 
-    def learn_split(self, score_vector, state_vector, reward_vector) -> None:
+    def learn_split(self, score_vector, state_vector, reward_vector, axis) -> None:
         splits = {}
 
         for i in range(len(self.split_grid)):
             # print("Iteration split:", i + 1)
             # print("split state:", self.split_grid[i], i)
-            res = self.split(score_vector, state_vector, reward_vector, self.split_grid[i])
+            res = self.split(score_vector, state_vector, reward_vector, np.array([axis, self.split_grid[i][axis]]))
 
             reward_trajectory = res[SplitResults.RewardTrajectories]
             estimated_gradient = res[SplitResults.Gradient]
@@ -315,15 +361,18 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             thetas = res[SplitResults.SplitThetas]
 
             gradient_norm = np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1])
-            print("Point: ", self.split_grid[i])
-            print("Gradient mean:", estimated_gradient[0], estimated_gradient[1])
-            print("Thetas: ", thetas)
+            # print("Point: ", self.split_grid[i])
+            # print("Gradient mean:", estimated_gradient[0], estimated_gradient[1])
+            # print("Thetas: ", thetas)
             # if self.check_split(reward_trajectory[0], reward_trajectory[1], trajectories, estimated_gradient[0], estimated_gradient[1]):
+            
+            key = tuple([axis, self.split_grid[i][axis]])  
+            
             if self.check_split(reward_trajectory[0], reward_trajectory[1]):
-                splits[tuple(self.split_grid[i])] = [thetas, True, gradient_norm]
+                splits[key] = [thetas, True, gradient_norm]
 
             else:
-                splits[tuple(self.split_grid[i])] = [thetas, False, gradient_norm]
+                splits[key] = [thetas, False, gradient_norm]
 
             # print("norm left: ", np.linalg.norm(grad_tmp[0]))
             # print("norm right: ", np.linalg.norm(grad_tmp[1]))
@@ -337,13 +386,14 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             split = max(valid_splits.items(), key=lambda x: x[1][2])
 
             best_split_thetas = split[1][0]
-            best_split_state = np.array(split[0])
+            best_split_state = split[0]
 
             if self.verbose:
                 print("Split result: ", best_split_thetas)
                 print("Split state: ", best_split_state)
 
             # update tree policy
+            # self.policy.history.insert(best_split_thetas, self.father_id, best_split_state.item())
             self.policy.history.insert(best_split_thetas, self.father_id, best_split_state)
 
             self.split_done = True
@@ -448,7 +498,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         p = np.multiply(left, right)
         return p
 
-    def check_split(self, left, right, delta=0.05):
+    def check_split(self, left, right, delta=0.3):
         p = self.compute_p(left, right)
         # dot = np.dot(left, right.T)
         
@@ -460,7 +510,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
         term3 = np.mean(p)
 
-        print("************************", term1, term2, term3)
+        # print("************************", term1, term2, term3)
 
         return (test < 0)
 
@@ -509,37 +559,49 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         Parameters:
         states_vector (np.array): The matrix of sampled trajectories to generate the grid from.
 
+        axis (int): The axis to generate the grid on.
+
         Returns:
         np.array: A grid of split points.
         """
+
+        # Get the valid region for the current splitting parameter
         valid_region = self.policy.history.get_region(self.splitting_param, self.dim_state)
         print("Valid region: ", valid_region)
 
+        # Draw samples from a geometric distribution
         samples = np.random.geometric(1 - self.env.gamma, num_samples)
         samples = np.clip(samples, 0, self.env.horizon - 1)
 
+        # Get the points to sample from the trajectories
         points = np.linspace(0, num_samples - 1, num_samples, dtype=int) % self.batch_size
 
-        # tmp_grid = states_vector[points, samples].ravel()
+        # Get the points to sample from the trajectories
         tmp_grid = states_vector[points, samples]
-        print("Temp split grid:", tmp_grid)
-        
+
+        # Generate a mask to filter only state in the valid region
         mask = np.zeros((num_samples, self.dim_state), dtype=bool)
-       
         for j in range(num_samples):
             for i in range(self.dim_state):
-                mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1]) 
-
-        for i in range(self.dim_state):
-            if i !=axis  and abs(tmp_grid[i])>0:
-                mask[i,:]=False
-
+                mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1])
         
-        # mask = (tmp_grid >= valid_region[0]) & (tmp_grid <= valid_region[1])
-        print(mask)
-        self.split_grid = tmp_grid * mask 
+        # Generate the grid based on the valid region
+        tmp_grid = np.unique(tmp_grid * mask, axis=0)
 
-    def check_local_optima(self, not_avg_gradient, n=20) -> None:
+        # Convert each unique tuple back to an array and set a value only in the position defined by axis
+        self.split_grid = np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid])
+
+    
+    def set_value_at_axis(self, arr, axis):
+        # Create a new array with the same shape as arr and set all elements to zero
+        new_arr = np.zeros(arr.shape)
+
+        # Set the element at the position defined by axis to the corresponding value in arr
+        new_arr[axis] = arr[axis]
+
+        return new_arr
+
+    def check_local_optima(self, not_avg_gradient, n=10) -> None:
         if len(self.gradient_history) <= n:
             self.start_split = False
             return
@@ -557,7 +619,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         print("Gradient mean: ", mean)
 
         if np.isclose(mean, 0, atol=0.5):
-            print(not_avg_gradient.shape)
+            # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0)
             best_region = np.argmax(var)
             print("Variance: ", var)
@@ -581,8 +643,8 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
                 # usefull structures
                 self.father_id = self.policy.history.get_all_leaves()[best_region].node_id
 
-                print("Father id: ", self.father_id, self.policy.history.get_all_leaves()[best_region].id_father)
-                self.policy.history.to_list(self.policy.history.nodes[self.father_id])
+                # print("Father id: ", self.father_id, self.policy.history.get_all_leaves()[best_region].id_father)
+                # self.policy.history.to_list(self.policy.history.nodes[self.father_id])
                 
                 self.splitting_param = self.policy.history.get_all_leaves()[best_region]
                 self.splitting_coordinate = best_region
