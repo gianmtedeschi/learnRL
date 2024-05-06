@@ -27,8 +27,8 @@ ENV = "cartpole"
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
 
-alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim"]
-ALG = alg_selection[4]
+alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angles_multi_dim"]
+ALG = alg_selection[5]
 
 # environment
 horizon = 50
@@ -62,6 +62,8 @@ if ALG=="split_VM":
 
 if ALG== "split_multi_dim":
     dir=f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split_multi_dim/split_multi_dim_{ITE}_"
+if ALG=="angles_multi_dim":
+    dir=f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split_angles_multi_dim/split_angles_multi_dim_{ITE}_"
 
 if LR_STRATEGY == "adam":
     INIT_LR = 1e-3
@@ -269,6 +271,27 @@ if ALG=="split_multi_dim":
         split_grid=None
     )
     alg = PolicyGradientSplitMultiDim(**alg_parameters)
+
+if ALG=="split_angles_multi_dim":
+    alg_parameters = dict(
+        lr=[INIT_LR],
+        lr_strategy=LR_STRATEGY,
+        estimator_type="GPOMDP",
+        initial_theta=[0] * tot_params,
+        ite=ITE,
+        batch_size=BATCH,
+        env=env,
+        policy=pol,
+        data_processor=dp,
+        directory=dir,
+        verbose=DEBUG,
+        natural=NATURAL,
+        checkpoint_freq=100,
+        n_jobs=N_JOBS_PARAM,
+        baselines=BASELINE,
+        split_grid=None
+    )
+    alg = PolicyGradientSplitMultiDimAngles(**alg_parameters)
 
 
 if __name__ == "__main__":

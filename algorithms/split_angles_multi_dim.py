@@ -264,8 +264,8 @@ class PolicyGradientSplitMultiDimAngles(PolicyGradient):
         traj = []
 
         closest_leaf = self.policy.history.find_region_leaf(split_state)
-        lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, split_state, self.dim_state)
-        upper_vertex = self.policy.history.get_upper_vertex(closest_leaf, split_state, self.dim_state)
+        lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, self.dim_state)
+        upper_vertex = self.policy.history.get_upper_vertex(closest_leaf,  self.dim_state)
 
         left_upper = np.zeros(self.dim_state)
         left_lower = np.zeros(self.dim_state)

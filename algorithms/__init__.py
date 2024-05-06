@@ -4,3 +4,4 @@ from algorithms.pg_split import *
 from algorithms.pg_split_angles_variation import*
 from algorithms.pg_split_VM import*
 from algorithms.pg_split_multidim import*
+from algorithms.slit_angles_multi_dim import*
