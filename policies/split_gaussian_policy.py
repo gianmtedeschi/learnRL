@@ -87,3 +87,4 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
 
     def update_policy_params(self):
         self.tot_params = len(self.history.get_all_leaves())
+

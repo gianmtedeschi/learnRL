@@ -152,10 +152,7 @@ class BinaryTree:
 
         return region
     
-    def get_lower_vertex(self, node, split_point, dim_state):
-        axis = split_point[0]
-        point = split_point[1]
-
+    def get_lower_vertex(self, node, dim_state):
         vertex = np.zeros(dim_state)
         region = self.get_region(node, dim_state)
 
@@ -164,10 +161,7 @@ class BinaryTree:
 
         return vertex
     
-    def get_upper_vertex(self, node, split_point, dim_state):
-        axis = split_point[0]
-        point = split_point[1]
-        
+    def get_upper_vertex(self, node, dim_state):
         vertex = np.zeros(dim_state)
         region = self.get_region(node, dim_state)
 
@@ -175,6 +169,7 @@ class BinaryTree:
             vertex[i] = region[i][1]
 
         return vertex
+
 
     # def print_inorder(self):
     #     print("Inorder Traversal:", self.inorder_traversal(self.root))
