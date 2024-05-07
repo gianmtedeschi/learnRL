@@ -264,8 +264,8 @@ class PolicyGradientSplit(PolicyGradient):
         traj = []
 
         closest_leaf = self.policy.history.find_region_leaf(split_state)
-        lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, split_state, self.dim_state)
-        upper_vertex = self.policy.history.get_upper_vertex(closest_leaf, split_state, self.dim_state)
+        lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, self.dim_state)
+        upper_vertex = self.policy.history.get_upper_vertex(closest_leaf, self.dim_state)
 
         left_upper = np.zeros(self.dim_state)
         left_lower = np.zeros(self.dim_state)
@@ -586,10 +586,10 @@ class PolicyGradientSplit(PolicyGradient):
                 mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1])
         
         # Generate the grid based on the valid region
-        tmp_grid = np.unique(tmp_grid * mask, axis=0)
-
+        tmp_grid = tmp_grid * mask
+                
         # Convert each unique tuple back to an array and set a value only in the position defined by axis
-        self.split_grid = np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid])
+        self.split_grid = np.unique(np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid]), axis=0)
 
     
     def set_value_at_axis(self, arr, axis):
@@ -602,6 +602,8 @@ class PolicyGradientSplit(PolicyGradient):
         return new_arr
 
     def check_local_optima(self, not_avg_gradient, n=10) -> None:
+        self.trial = 0
+
         if len(self.gradient_history) <= n:
             self.start_split = False
             return
@@ -611,6 +613,8 @@ class PolicyGradientSplit(PolicyGradient):
         if self.split_done:
             self.start_split = False
             self.split_done = False
+            self.splitting_coordinate = None
+            self.trial = 0
             self.gradient_history = []
             return
 
@@ -635,18 +639,24 @@ class PolicyGradientSplit(PolicyGradient):
             
             # multidimensional case
             else:
+                if best_region == self.splitting_coordinate:
+                    print("Same region, changing trial")
+                    self.trial += 1
+                    best_region = np.argsort(var)[::-1][(self.splitting_coordinate + self.trial) % var.size]
+                
                 self.start_split = True
                 print("Optimal configuration found!")
-                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
-                
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0], self.thetas[best_region])
+
                 # save father id for future insert
                 # usefull structures
                 self.father_id = self.policy.history.get_all_leaves()[best_region].node_id
 
                 # print("Father id: ", self.father_id, self.policy.history.get_all_leaves()[best_region].id_father)
                 # self.policy.history.to_list(self.policy.history.nodes[self.father_id])
-                
+
                 self.splitting_param = self.policy.history.get_all_leaves()[best_region]
+                # self.splitting_param = self.thetas[best_region]
                 self.splitting_coordinate = best_region
 
             self.start_split = True

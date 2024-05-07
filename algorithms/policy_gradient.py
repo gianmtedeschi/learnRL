@@ -188,7 +188,7 @@ class PolicyGradient:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_trajectory, axis=1) # + 1e-10
+        rolling_scores = np.cumsum(score_trajectory, axis=1) + 1e-10
 
         
         if self.baselines == "avg":

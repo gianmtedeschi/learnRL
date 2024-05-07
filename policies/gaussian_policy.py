@@ -51,7 +51,7 @@ class GaussianPolicy(BasePolicy, ABC):
     def draw_action(self, state) -> float:
         if state.size != self.dim_state:
             err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
-            err_msg += f"\n{len(state)} vs. {self.dim_state}"
+            err_msg += f"\n{len(state)} vs. {self.dim_state} {state}"
             raise ValueError(err_msg)
 
         if state.size == 1:
