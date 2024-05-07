@@ -24,7 +24,7 @@ import json
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car"]
-ENV = "cartpole"
+ENV = "mountain_car"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -90,7 +90,7 @@ if ENV == "lq":
     dir += f"lq_{horizon}_"
 if ENV=="mountain_car":
     env_class=Continuous_MountainCarEnv
-    env= Continuous_MountainCarEnv(horizon=horizon,gamma=gamma)
+    env= Continuous_MountainCarEnv()
     dir +=f"mountaincar_{horizon}_"
 
 elif ENV == "cartpole":
