@@ -541,7 +541,8 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         S= S_1/N
         R= R_1/N
         if C==0:
-            T_1= np.arctan(S/C)
+            T_1= np.radians(np.pi/2)
+
         if C<0:
             T_1= np.arctan(S/C) + np.pi
         if C>0 and S<0:
@@ -551,11 +552,11 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
         if(self.check_Von_Mises(angle)):
           if R<= 2/3:
-              conf_interval = [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(1-delta/2)**2)/((R_1**2)*(4*N-stats.norm.ppf(1-delta/2)**2))))),
-                               np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(1-delta/2)**2)/((R_1**2)*(4*N-stats.norm.ppf(1-delta/2)**2)))))]
+              conf_interval = [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(delta)**2)/((R_1**2)*(4*N-stats.norm.ppf(delta)**2))))),
+                               np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(delta)**2)/((R_1**2)*(4*N-stats.norm.ppf(delta)**2)))))]
           else:
-              conf_interval= [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(1-delta/2))**2)/N))/R_1)),
-                               np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(1-delta/2))**2)/N))/R_1))]
+              conf_interval= [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(delta))**2)/N))/R_1)),
+                               np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(delta))**2)/N))/R_1))]
 
         else:
            H= (np.cos(2*T_1)*np.sum(np.cos(2*angle)) + np.sin(2*T_1)*np.sum(np.sin(2*angle)))/N

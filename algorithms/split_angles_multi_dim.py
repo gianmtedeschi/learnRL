@@ -534,6 +534,8 @@ class PolicyGradientSplitMultiDimAngles(PolicyGradient):
             T_1= np.arctan(S/C) +2*np.pi
         if C>0 and S>=0:
             T_1= np.arctan(S/C)
+        if C==0:
+            T_1=np.radians(np.pi/2)
 
         H= (np.cos(2*T_1)*np.sum(np.cos(2*angle)) + np.sin(2*T_1)*np.sum(np.sin(2*angle)))/len(angle)
         sigma_hat = np.sqrt(len(angle)*(1-H)/(4*R_1**2))

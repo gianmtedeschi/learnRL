@@ -204,7 +204,7 @@ class BinaryTree:
     def to_png(self, filename='binary_tree.png'):
         dot = graphviz.Digraph(format='png')
         self._to_dot(self.nodes[0], dot)
-        dot.render(filename, format='png', cleanup=True)
+        dot.render(filename=filename,directory=f"Users/Admin/OneDrive/Documenti/GitHub/learnRL", format='png', cleanup=True)
 
     def to_list(self, node) -> None:
         if node is None:
