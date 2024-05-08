@@ -30,7 +30,7 @@ ENV = "mountain_car"
 POL = "split_gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angles_multi_dim","VM_multi_dim"]
-ALG = alg_selection[5]
+ALG = alg_selection[6]
 
 # environment
 horizon = 50
@@ -140,7 +140,7 @@ elif POL == "split_gaussian":
         parameters=np.ones(tot_params),
         dim_state=s_dim,
         dim_action=a_dim,
-        std_dev=0.75,
+        std_dev=0.3,
         std_decay=0,
         std_min=1e-6,
         multi_linear=MULTI_LINEAR,

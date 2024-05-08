@@ -235,6 +235,7 @@ class PolicyGradientSplitMultiDimAngles(PolicyGradient):
                     self.policy.history.print_tree()
 
                 self.policy.history.to_png(f"policy_tree")
+                print("TREE SAVED")
                 splits += 1
 
             # Log
