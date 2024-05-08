@@ -540,6 +540,8 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         C= C_1/N
         S= S_1/N
         R= R_1/N
+        if C==0:
+            T_1= np.arctan(S/C)
         if C<0:
             T_1= np.arctan(S/C) + np.pi
         if C>0 and S<0:
