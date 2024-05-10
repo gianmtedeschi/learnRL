@@ -501,16 +501,15 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
 
     def check_split(self, left, right, delta=0.3):
         p = self.compute_p(left, right)
-        # dot = np.dot(left, right.T)
         
         z = np.var(p)
         sup = np.max(p)
         
         test = np.sqrt((2 * z * np.log(2/delta))/self.batch_size) + (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup) + np.mean(p)
-        term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
-        term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
-        term3 = np.mean(p)
-
+        
+        # term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
+        # term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
+        # term3 = np.mean(p)
         # print("************************", term1, term2, term3)
 
         return (test < 0)

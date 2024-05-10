@@ -534,7 +534,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
 
 
-    def check_split(self, left, right, delta=0.1):
+    def check_split(self, left, right, alpha=0.1):
         test = False
         angle = self.compute_angle(left, right)
 
