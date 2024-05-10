@@ -61,6 +61,9 @@ from tqdm import tqdm
 import copy
 from adam.adam import Adam
 
+
+import scipy.stats as stats
+import astropy.stats as circ
 import os
 import time
 
@@ -103,7 +106,6 @@ class PolicyGradientSplit(PolicyGradient):
         assert initial_theta is not None, err_msg
         self.thetas = np.array(initial_theta)
         self.dim = len(self.thetas)
-        print(self.thetas, self.dim)
 
         err_msg = "[PG_split] env is None."
         assert env is not None, err_msg
@@ -164,6 +166,7 @@ class PolicyGradientSplit(PolicyGradient):
         self.start_split = False
         self.gradient_history = []
 
+        self.trial = 0
         return
 
     def learn(self) -> None:
@@ -283,31 +286,14 @@ class PolicyGradientSplit(PolicyGradient):
             right_lower[i] = lower_vertex[i]
             if i == split_state[0]:
                 right_lower[i] = split_state[1]
-        
-        
+                
         # print("Destra:", right_lower, right_upper)
         # print("Sinistra:", left_lower, left_upper)
 
-
         traj_l, traj_r = 0, 0
-        # score_left = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
-        # score_right = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float64)
-
-
         score_left = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
         score_right = np.zeros((self.batch_size, self.env.horizon, 1), dtype=np.float64)
 
-        # for i in range(len(state_vector)):
-        #     for j in range(len(state_vector[i])):
-        #         # TODO cambia if basandola su vertici regione
-        #         if state_vector[i][j].all() < split_state.all() and (
-        #                 closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] >= closest_leaf.val[1]):
-        #             score_left[i, j, :] = score_vector[i][j]
-        #             traj_l += 1
-        #         elif state_vector[i][j].all() >= split_state.all() and (
-        #                 closest_leaf is None or closest_leaf.val[1] is None or state_vector[i][j] <= closest_leaf.val[1]):
-        #             score_right[i, j, :] = score_vector[i][j]
-        #             traj_r += 1
         
         for i in range(len(state_vector)):
             for j in range(len(state_vector[i])):
@@ -364,13 +350,11 @@ class PolicyGradientSplit(PolicyGradient):
             # print("Point: ", self.split_grid[i])
             # print("Gradient mean:", estimated_gradient[0], estimated_gradient[1])
             # print("Thetas: ", thetas)
-            # if self.check_split(reward_trajectory[0], reward_trajectory[1], trajectories, estimated_gradient[0], estimated_gradient[1]):
             
             key = tuple([axis, self.split_grid[i][axis]])  
             
-            if self.check_split(reward_trajectory[0], reward_trajectory[1]):
+            if self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1]):
                 splits[key] = [thetas, True, gradient_norm]
-
             else:
                 splits[key] = [thetas, False, gradient_norm]
 
@@ -429,92 +413,27 @@ class PolicyGradientSplit(PolicyGradient):
         else:
             self.thetas = new_theta
 
-    def compute_const(self, left, right):
-        res = np.multiply(left, right)
-        var = np.var(res)
-
-        return np.sqrt(var * 1.96)
-
-    # todo fai moltiplicazione element wise, poi argmin e splitta e rigenera griglia solo su spazio parametro
-    # todo con gradienti più negativi
-    # def check_local_optima(self) -> None:
-    #     if len(self.gradient_history) <= 1:
-    #         self.start_split = False
-    #         return
-
-    #     # Case where a split just happened so no need to check for local optima
-    #     # Reset gradient history to match the new number of parameters
-    #     if self.split_done:
-    #         self.start_split = False
-    #         self.split_done = False
-    #         self.gradient_history = []
-    #         return
-
-    #     latest_two = self.gradient_history[-2:]
-    #     # res = np.multiply(latest_two[0], latest_two[1])
-    #     # res = np.dot(latest_two[0], latest_two[1])
-    #     #
-    #     # self.start_split = all(val < 0 for val in res)
-    #     #
-    #     # self.start_split = res < 0
-    #     # if self.start_split:
-    #     #     print("Optimal configuration found!")
-    #     if np.dot(latest_two[0], latest_two[1]) < 0:
-    #         res = np.multiply(latest_two[0], latest_two[1])
-    #         best_region = np.argmin(res)
-
-    #         # print("AO ANNAMO***************: ", latest_two[0], latest_two[1], latest_two[0].dtype, latest_two[1].dtype)
-    #         if latest_two[0].size == 1:
-    #             self.start_split = True
-    #             print("Optimal configuration found!")
-    #         else:
-    #             self.start_split = True
-    #             print("Optimal configuration found!")
-    #             print("Splitting on param side: ", res[best_region])
-    #             split_point = self.policy.history.get_father(best_region)
-    #             # self.split_grid = np.linspace(split_point.val[1], -split_point.val[1], 10)
-    #     else:
-    #         self.start_split = False
-    
-    # def compute_p(self, left, right):
-    #     p = np.multiply(left, right)
-    #     return p
-
-    # def check_split(self, left, right, delta=0.3):
-    #     p = self.compute_p(left, right)
-    #     z = np.var(p)
-    #     sup = np.max(p)
-        
-    #     test = np.sqrt((2 * z * np.log(2/delta))/self.batch_size) + (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup) + - np.mean(p)
-    #     term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
-    #     term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
-    #     term3 = np.mean(p)
-
-    #     print("************************", term1, term2, term3)
-
-    #     return (test < 0)
-
+############################################################################################################
     def compute_p(self, left, right):
         p = np.multiply(left, right)
         return p
 
-    def check_split(self, left, right, delta=0.3):
+    def check_split_bernstein(self, left, right, delta=0.1):
         p = self.compute_p(left, right)
-        # dot = np.dot(left, right.T)
         
         z = np.var(p)
         sup = np.max(p)
         
         test = np.sqrt((2 * z * np.log(2/delta))/self.batch_size) + (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup) + np.mean(p)
-        term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
-        term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
-        term3 = np.mean(p)
-
+        
+        # term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
+        # term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
+        # term3 = np.mean(p)
         # print("************************", term1, term2, term3)
 
         return (test < 0)
 
-    def check_split_ci(self, left, right, delta=0.3):
+    def check_split_bernstein_ci(self, left, right, delta=0.3):
         z_left = np.var(left)
         z_right = np.var(right)
 
@@ -534,23 +453,84 @@ class PolicyGradientSplit(PolicyGradient):
         else:
             return False
     
-    # todo dividi su tutto n e non
-    # def check_split(self, left, right, n, grad_l, grad_r):
-    #     # n = 1e-5 if np.min(n) == 0 else np.min(n)
-    #     n = self.batch_size
-    #     test = np.dot(grad_l, grad_r) + (self.compute_const(left, right) / np.sqrt(n))
+    def compute_angle(self,left,right):
+        dot_products= np.sum(left*right,axis=1)
+        left_norms = np.linalg.norm(left,axis=1)
+        right_norms = np.linalg.norm(right,axis=1)
 
-    #     # mx = np.zeros(left.shape[0])
-    #     # for b in range(left.shape[0]):
-    #     #     mx[b] = left[b, :].reshape(1, -1) @ right[b, :].reshape(-1, 1)
-    #     #
-    #     # test = mx + (self.compute_const(left, right) / np.sqrt(n))
-    #     # if right.any() != 0:
-    #     #     pass
-    #     # print("Dot product", np.dot(left, right))
-    #     # print("c/n:", self.compute_const(left, right)/np.sqrt(n))
-    #     # print("test:", test, n)
-    #     return (test < 0)
+        non_zero_indices = np.logical_and(left_norms != 0, right_norms != 0)
+    
+        cos_angles = np.zeros_like(dot_products)
+        cos_angles[non_zero_indices] = dot_products[non_zero_indices] / (left_norms[non_zero_indices] * right_norms[non_zero_indices])
+        cos_angles = np.clip(cos_angles, -1.0, 1.0)
+
+        angles = np.arccos(cos_angles)
+        return angles
+    
+    def uniformity_test(self, n, R):
+        return (2 * n * R**2 > stats.chi2.ppf(0.995, 2))
+
+    def check_split_von_mises(self, left, right, alpha=0.1):
+        
+        test = False
+        angle = self.compute_angle(left, right)
+
+        print("DEBUG:", left, right, angle)
+        N = len(angle)
+        C_1 = np.sum(np.cos(angle))
+        S_1 = np.sum(np.sin(angle))
+        R_1 = np.sqrt(C_1**2 + S_1**2)
+        
+        C = C_1/N
+        S = S_1/N
+        R = R_1/N
+        
+        T_1 = np.arctan2(S,C)
+
+        if T_1 < 0:
+            T_1 += np.pi
+        
+        print("N: ", N)
+        if not self.uniformity_test(N, R):
+            print("Uniformity test failed")
+            return False
+        elif R <= 2/3:
+            conf_interval = [T_1 - np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.chi2.ppf(1 - alpha, 1))/((R_1**2)*(4*N-stats.chi2.ppf(1 - alpha, 1))))),
+                             T_1 + np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.chi2.ppf(1 - alpha, 1))/((R_1**2)*(4*N-stats.chi2.ppf(1 - alpha, 1)))))]
+        else:
+            conf_interval = [T_1 - np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp((stats.chi2.ppf(1 - alpha, 1))/N))/R_1),
+                             T_1 + np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp((stats.chi2.ppf(1 - alpha, 1))/N))/R_1)]
+
+
+        # if(self.check_von_mises(angle)):
+        # if(True):
+        #   if R<= 2/3:
+        #       conf_interval = [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(1-delta/2)**2)/((R_1**2)*(4*N-stats.norm.ppf(1-delta/2)**2))))),
+        #                        np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(1-delta/2)**2)/((R_1**2)*(4*N-stats.norm.ppf(1-delta/2)**2)))))]
+        #   else:
+        #       conf_interval= [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(1-delta/2))**2)/N))/R_1)),
+        #                        np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(1-delta/2))**2)/N))/R_1))]
+
+        # else:
+        #    H= (np.cos(2*T_1)*np.sum(np.cos(2*angle)) + np.sin(2*T_1)*np.sum(np.sin(2*angle)))/N
+        #    sigma_hat = np.sqrt(N*(1-H)/(4*R_1**2))
+        #    conf_interval= [np.degrees(T_1) - np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2))), np.degrees(T_1) + np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2)))]
+
+        
+        print("[", conf_interval[0],",",conf_interval[1],"]")
+        
+        # if conf_interval[1]< np.degrees(np.pi/2):
+        #     test=False
+        # if conf_interval[0]> np.degrees(np.pi/2):
+        #     test= True
+
+        if conf_interval[0] > np.pi/2:
+            test = True
+        else:
+            test = False
+                
+        return test
+############################################################################################################
     
     def generate_grid(self, states_vector, axis, num_samples=1) -> np.array:
         """
@@ -602,8 +582,6 @@ class PolicyGradientSplit(PolicyGradient):
         return new_arr
 
     def check_local_optima(self, not_avg_gradient, n=10) -> None:
-        self.trial = 0
-
         if len(self.gradient_history) <= n:
             self.start_split = False
             return
@@ -641,8 +619,8 @@ class PolicyGradientSplit(PolicyGradient):
             else:
                 if best_region == self.splitting_coordinate:
                     print("Same region, changing trial")
-                    self.trial += 1
                     best_region = np.argsort(var)[::-1][(self.splitting_coordinate + self.trial) % var.size]
+                    self.trial += 1
                 
                 self.start_split = True
                 print("Optimal configuration found!")
