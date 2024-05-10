@@ -162,6 +162,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         self.max_splits = max_splits
         self.split_done = False
         self.start_split = False
+        self.trial=0
         self.gradient_history = []
 
         return
@@ -551,19 +552,9 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
     #     # print("c/n:", self.compute_const(left, right)/np.sqrt(n))
     #     # print("test:", test, n)
     #     return (test < 0)
-    
+
     def generate_grid(self, states_vector, axis, num_samples=1) -> np.array:
-        """
-        Generate a grid of split points based on the occupancy of sampled trajectories.
-
-        Parameters:
-        states_vector (np.array): The matrix of sampled trajectories to generate the grid from.
-
-        axis (int): The axis to generate the grid on.
-
-        Returns:
-        np.array: A grid of split points.
-        """
+    
 
         # Get the valid region for the current splitting parameter
         valid_region = self.policy.history.get_region(self.splitting_param, self.dim_state)
@@ -586,10 +577,11 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
                 mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1])
         
         # Generate the grid based on the valid region
-        tmp_grid = np.unique(tmp_grid * mask, axis=0)
+        tmp_grid = tmp_grid * mask
+        #print("tmp_grid=,",tmp_grid)
 
         # Convert each unique tuple back to an array and set a value only in the position defined by axis
-        self.split_grid = np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid])
+        self.split_grid = np.unique(np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid]), axis=0)
 
     
     def set_value_at_axis(self, arr, axis):
@@ -611,6 +603,8 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         if self.split_done:
             self.start_split = False
             self.split_done = False
+            self.splitting_coordinate= None
+            self.trial=0
             self.gradient_history = []
             return
 
@@ -635,9 +629,14 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             
             # multidimensional case
             else:
+                if best_region == self.splitting_coordinate:
+                    print("Same region,changing trial")
+                    best_region= np.argsort(var)[::-1][(self.splitting_coordinate + self.trial)%var.size]
+                    self.trial +=1
+
                 self.start_split = True
                 print("Optimal configuration found!")
-                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0],self.thetas[best_region])
                 
                 # save father id for future insert
                 # usefull structures
@@ -652,6 +651,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             self.start_split = True
         else:
             self.start_split = False
+
 
     def save_results(self) -> None:
         results = {

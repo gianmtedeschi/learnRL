@@ -114,38 +114,40 @@ class BinaryTree:
 
         return res
     
-    """maggiore coppia x y minimi e minore x y massimi su possibile nuova foglia"""
     def get_region(self, node, dim_state):
         region = np.zeros((dim_state, 2))
         for i in range(dim_state):
+            # reset node to selected one
+            test_node = node
+
             is_left = False
             is_right = False
             is_root = False
             lb = -np.inf
             ub = np.inf
-
-            # if node.id_left is not None or node.id_right is not None:
-            #     print("[TREE POLICY] You are requesting a region for a non leaf!")
-            #     return None
+            
+            if test_node.id_left is not None or test_node.id_right is not None:
+                print("[TREE POLICY] You are requesting a region for a non leaf!")
+                return None
 
             # case we are root
-            if node.id_father is None:
+            if test_node.id_father is None:
                 region[i] = [lb, ub]
                 continue
             
-            father_node = self.nodes[node.id_father]
+            father_node = self.nodes[test_node.id_father]
             while not ((is_left and is_right) or is_root):
-                if father_node.id_left == node.node_id and not is_left:
+                if father_node.id_left == test_node.node_id and not is_left:
                     ub = father_node.val[1][1]
                     is_left = True
-                elif father_node.id_right == node.node_id and not is_right:
+                elif father_node.id_right == test_node.node_id and not is_right:
                     lb = father_node.val[1][1]
                     is_right = True
 
                 if father_node.id_father is None:
                     is_root = True
                 else:
-                    node = father_node
+                    test_node = father_node
                     father_node = self.nodes[father_node.id_father]
             
             region[i] = [lb, ub]
@@ -169,27 +171,6 @@ class BinaryTree:
             vertex[i] = region[i][1]
 
         return vertex
-
-
-    # def print_inorder(self):
-    #     print("Inorder Traversal:", self.inorder_traversal(self.root))
-
-    # def print_all_nodes(self):
-    #     print("All Nodes:")
-    #     for node in self.nodes:
-    #         print(f"Node ID: {node.node_id}, Value: {node.val}")
-
-    # def print_tree(self, node=None, level=0, prefix="Root: "):
-    #     if node is None:
-    #         node = self.root
-
-    #     stack = [(node, level, prefix)]
-    #     while stack:
-    #         node, level, prefix = stack.pop()
-    #         if node:
-    #             print(" " * (level * 5) + prefix + f"|- {node.val} ({node.node_id})")
-    #             stack.append((node.right, level + 1, " " * (level * 6) + "|- R: "))
-    #             stack.append((node.left, level + 1, " " * (level * 6) + "|- L: "))
 
     def _to_dot(self, node, dot):
         if node:

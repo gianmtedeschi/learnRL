@@ -170,6 +170,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         self.split_done = False
         self.start_split = False
         self.gradient_history = []
+        self.trial=0
 
         return
 
@@ -527,54 +528,70 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             return True
         else:
             return False
+    
+    def uniformity_test(self, n, R):
+        return (2 * n * R**2 > stats.chi2.ppf(0.995, 2))
 
 
 
     def check_split(self, left, right, delta=0.1):
-        test= False
+        test = False
         angle = self.compute_angle(left, right)
-        N= len(angle)
-        C_1= np.sum(np.cos(angle))
-        S_1= np.sum(np.sin(angle))
-        R_1=np.sqrt(C_1**2 + S_1**2)
-        C= C_1/N
-        S= S_1/N
-        R= R_1/N
-        if C==0:
-            T_1= np.radians(np.pi/2)
 
-        if C<0:
-            T_1= np.arctan(S/C) + np.pi
-        if C>0 and S<0:
-            T_1= np.arctan(S/C) +2*np.pi
-        if C>0 and S>=0:
-            T_1= np.arctan(S/C)
+        print("DEBUG:", left, right, angle)
+        N = len(angle)
+        C_1 = np.sum(np.cos(angle))
+        S_1 = np.sum(np.sin(angle))
+        R_1 = np.sqrt(C_1**2 + S_1**2)
+        
+        C = C_1/N
+        S = S_1/N
+        R = R_1/N
+        
+        T_1 = np.arctan2(S,C)
 
-        if(self.check_Von_Mises(angle)):
-          if R<= 2/3:
-              conf_interval = [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(delta)**2)/((R_1**2)*(4*N-stats.norm.ppf(delta)**2))))),
-                               np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(delta)**2)/((R_1**2)*(4*N-stats.norm.ppf(delta)**2)))))]
-          else:
-              conf_interval= [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(delta))**2)/N))/R_1)),
-                               np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(delta))**2)/N))/R_1))]
-
+        if T_1 < 0:
+            T_1 += np.pi
+        
+        print("N: ", N)
+        if not self.uniformity_test(N, R):
+            print("Uniformity test failed")
+            return False
+        elif R <= 2/3:
+            conf_interval = [T_1 - np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.chi2.ppf(1 - alpha, 1))/((R_1**2)*(4*N-stats.chi2.ppf(1 - alpha, 1))))),
+                             T_1 + np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.chi2.ppf(1 - alpha, 1))/((R_1**2)*(4*N-stats.chi2.ppf(1 - alpha, 1)))))]
         else:
-           H= (np.cos(2*T_1)*np.sum(np.cos(2*angle)) + np.sin(2*T_1)*np.sum(np.sin(2*angle)))/N
-           sigma_hat = np.sqrt(N*(1-H)/(4*R_1**2))
-           conf_interval= [np.degrees(T_1) - np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2))), np.degrees(T_1) + np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2)))]
+            conf_interval = [T_1 - np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp((stats.chi2.ppf(1 - alpha, 1))/N))/R_1),
+                             T_1 + np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp((stats.chi2.ppf(1 - alpha, 1))/N))/R_1)]
+
+
+        # if(self.check_von_mises(angle)):
+        # if(True):
+        #   if R<= 2/3:
+        #       conf_interval = [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(1-delta/2)**2)/((R_1**2)*(4*N-stats.norm.ppf(1-delta/2)**2))))),
+        #                        np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(2*N*(2*R_1**2 - N*stats.norm.ppf(1-delta/2)**2)/((R_1**2)*(4*N-stats.norm.ppf(1-delta/2)**2)))))]
+        #   else:
+        #       conf_interval= [np.degrees(T_1) - np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(1-delta/2))**2)/N))/R_1)),
+        #                        np.degrees(T_1) + np.degrees(np.arccos(np.sqrt(N**2 - (N**2 - R_1**2)*np.exp(((stats.norm.ppf(1-delta/2))**2)/N))/R_1))]
+
+        # else:
+        #    H= (np.cos(2*T_1)*np.sum(np.cos(2*angle)) + np.sin(2*T_1)*np.sum(np.sin(2*angle)))/N
+        #    sigma_hat = np.sqrt(N*(1-H)/(4*R_1**2))
+        #    conf_interval= [np.degrees(T_1) - np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2))), np.degrees(T_1) + np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2)))]
 
         
         print("[", conf_interval[0],",",conf_interval[1],"]")
-        if conf_interval[1]< np.degrees(np.pi/2):
-            test=False
-        if conf_interval[0]> np.degrees(np.pi/2):
-            test= True
         
-        
-        
+        # if conf_interval[1]< np.degrees(np.pi/2):
+        #     test=False
+        # if conf_interval[0]> np.degrees(np.pi/2):
+        #     test= True
 
-
-
+        if conf_interval[0] > np.pi/2:
+            test = True
+        else:
+            test = False
+                
         return test
 
     
@@ -630,10 +647,11 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
                 mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1])
         
         # Generate the grid based on the valid region
-        tmp_grid = np.unique(tmp_grid * mask, axis=0)
+        tmp_grid = tmp_grid * mask
+        #print("tmp_grid=,",tmp_grid)
 
         # Convert each unique tuple back to an array and set a value only in the position defined by axis
-        self.split_grid = np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid])
+        self.split_grid = np.unique(np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid]), axis=0)
 
     
     def set_value_at_axis(self, arr, axis):
@@ -655,6 +673,8 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         if self.split_done:
             self.start_split = False
             self.split_done = False
+            self.splitting_coordinate= None
+            self.trial=0
             self.gradient_history = []
             return
 
@@ -679,9 +699,14 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             
             # multidimensional case
             else:
+                if best_region == self.splitting_coordinate:
+                    print("Same region,changing trial")
+                    best_region= np.argsort(var)[::-1][(self.splitting_coordinate + self.trial)%var.size]
+                    self.trial +=1
+
                 self.start_split = True
                 print("Optimal configuration found!")
-                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0],self.thetas[best_region])
                 
                 # save father id for future insert
                 # usefull structures
