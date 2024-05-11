@@ -167,6 +167,10 @@ class PolicyGradientSplit(PolicyGradient):
         self.gradient_history = []
 
         self.trial = 0
+        # TESTING PURPOSES
+        self.split_grid = np.array([[0], [1], [-1],[2],[-2],[4],[-4],[8],[-8],[16],[-16]])
+
+        self.split_ite = []
         return
 
     def learn(self) -> None:
@@ -203,7 +207,7 @@ class PolicyGradientSplit(PolicyGradient):
                 if axis == self.dim_state:
                     axis = 0
                 # Compute the split grid
-                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=20)
+                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=50)
                 print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
                 
                 # Start the split procedure
@@ -228,11 +232,10 @@ class PolicyGradientSplit(PolicyGradient):
                 self.gradient_history.append(estimated_gradient)
                 self.update_parameters(estimated_gradient)
             else:
-                if self.verbose:
-                    self.policy.history.print_tree()
-
-                self.policy.history.to_png(f"policy_tree")
+                name = self.directory + "/policy_tree"
+                self.policy.history.to_png(name)
                 splits += 1
+                self.split_ite.append(i)
 
             # Log
             if self.verbose:
@@ -354,6 +357,7 @@ class PolicyGradientSplit(PolicyGradient):
             key = tuple([axis, self.split_grid[i][axis]])  
             
             if self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1]):
+            # if(True):
                 splits[key] = [thetas, True, gradient_norm]
             else:
                 splits[key] = [thetas, False, gradient_norm]
@@ -378,14 +382,22 @@ class PolicyGradientSplit(PolicyGradient):
 
             # update tree policy
             # self.policy.history.insert(best_split_thetas, self.father_id, best_split_state.item())
-            self.policy.history.insert(best_split_thetas, self.father_id, best_split_state)
+            self.policy.history.insert(np.array(best_split_thetas).ravel(), self.father_id, best_split_state)
 
             self.split_done = True
-            self.thetas = np.array(self.policy.history.get_current_policy()).ravel()
+            
+            self.thetas = np.array(self.policy.history.get_current_policy())
+          
             print("New thetas: ", self.thetas)
             self.policy.update_policy_params()
             self.dim = len(self.thetas)
-
+            
+            # adam update
+            if self.lr_strategy == "adam":
+                index_of_split = list(splits.keys()).index(best_split_state)
+                self.adam_optimizer.update_params(local=False, coord=self.splitting_coordinate, index=index_of_split)
+                
+            # self.split_grid = np.delete(self.split_grid, np.argwhere(self.split_grid == best_split_state[1]), axis=0)
             # index = np.argwhere(self.split_grid == best_split_state)
             # self.split_grid = np.delete(self.split_grid, index)
         else:
@@ -393,16 +405,19 @@ class PolicyGradientSplit(PolicyGradient):
 
     def update_parameters(self, estimated_gradient, local=False, split_state=None):
         new_theta = None
+        coord = None
         old_theta = self.thetas
+        
         # Update parameters
         if split_state is not None:
             old_theta = self.policy.history.find_region_leaf(split_state).val[0]
-
+            coord = self.splitting_coordinate
+            
         if self.lr_strategy == "constant":
             new_theta = old_theta + self.lr * estimated_gradient
 
         elif self.lr_strategy == "adam":
-            adaptive_lr = self.adam_optimizer.next(estimated_gradient)
+            adaptive_lr = self.adam_optimizer.next(estimated_gradient, coord=coord, local=local)
             new_theta = old_theta + adaptive_lr
         else:
             err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
@@ -412,6 +427,8 @@ class PolicyGradientSplit(PolicyGradient):
             return new_theta
         else:
             self.thetas = new_theta
+            self.policy.history.update_all_leaves(self.thetas)
+            self.policy.history.to_png(self.directory + "/policy_tree")
 
 ############################################################################################################
     def compute_p(self, left, right):
@@ -475,7 +492,7 @@ class PolicyGradientSplit(PolicyGradient):
         test = False
         angle = self.compute_angle(left, right)
 
-        print("DEBUG:", left, right, angle)
+        # print("DEBUG:", left, right, angle)
         N = len(angle)
         C_1 = np.sum(np.cos(angle))
         S_1 = np.sum(np.sin(angle))
@@ -490,7 +507,7 @@ class PolicyGradientSplit(PolicyGradient):
         if T_1 < 0:
             T_1 += np.pi
         
-        print("N: ", N)
+        # print("N: ", N)
         if not self.uniformity_test(N, R):
             print("Uniformity test failed")
             return False
@@ -517,7 +534,7 @@ class PolicyGradientSplit(PolicyGradient):
         #    conf_interval= [np.degrees(T_1) - np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2))), np.degrees(T_1) + np.degrees(np.arcsin(sigma_hat*stats.norm.ppf(1-delta/2)))]
 
         
-        print("[", conf_interval[0],",",conf_interval[1],"]")
+        # print("[", conf_interval[0],",",conf_interval[1],"]")
         
         # if conf_interval[1]< np.degrees(np.pi/2):
         #     test=False
@@ -600,7 +617,7 @@ class PolicyGradientSplit(PolicyGradient):
         mean = np.linalg.norm(mean)
         print("Gradient mean: ", mean)
 
-        if np.isclose(mean, 0, atol=0.5):
+        if np.isclose(mean, 0, atol=0.1):
             # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0)
             best_region = np.argmax(var)
@@ -624,7 +641,7 @@ class PolicyGradientSplit(PolicyGradient):
                 
                 self.start_split = True
                 print("Optimal configuration found!")
-                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0], self.thetas[best_region])
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
 
                 # save father id for future insert
                 # usefull structures
@@ -648,7 +665,7 @@ class PolicyGradientSplit(PolicyGradient):
             "thetas_history": list(value.tolist() for value in self.theta_history.values()),
             "last_theta": np.array(self.thetas, dtype=float).tolist(),
             "best_perf": float(self.best_performance_theta),
-            # "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
+            "split_ite": self.split_ite
         }
 
         # Save the json
