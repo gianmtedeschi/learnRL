@@ -56,7 +56,8 @@ class LQ(BaseEnv):
     def step(self, action, render=False):
         u = np.clip(np.ravel(np.atleast_1d(action)), -self.max_action, self.max_action).flatten()
         noise = np.dot(self.sigma_noise, np.random.randn(self.state_dim))
-        xn = np.clip(np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
+        # xn = np.clip(np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
+        xn = np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise
         cost = np.dot(self.state,
                       np.dot(self.Q, self.state)) + \
                np.dot(u, np.dot(self.R, u))
@@ -74,7 +75,7 @@ class LQ(BaseEnv):
         self.timestep = 0
         if state is None:
             self.state = np.array(self.np_random.uniform(low=-5.,
-                                                         high=5.))
+                                                         high=5.,size=self.state_dim))
         else:
             self.state = np.array(state)
 

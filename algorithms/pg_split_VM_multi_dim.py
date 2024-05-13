@@ -90,7 +90,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             split_grid: np.array = None,
-            max_splits: int = 100,
+            max_splits: int = 10,
             baselines: str = None
     ) -> None:
         # Class' parameter with checks
@@ -230,8 +230,9 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
                     err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                     raise NotImplementedError(err_msg)
 
-                self.gradient_history.append(estimated_gradient)
+                self.gradient_history.append(estimated_gradient.ravel())
                 self.update_parameters(estimated_gradient)
+                print("Gradient:",estimated_gradient)
             else:
                 if self.verbose:
                     self.policy.history.print_tree()
@@ -266,6 +267,9 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             # check if we reached an optimal configuration
             if splits < self.max_splits:
                 self.check_local_optima(not_avg_gradient)
+            else:
+                print("Max splits reached!")
+                self.split_done=False
         return
 
     def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
@@ -389,6 +393,9 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             # print(estimated_gradient[0], estimated_gradient[1])
 
         valid_splits = {key: value for key, value in splits.items() if value[1] is True}
+        valid_splits={key:(value[0],self.policy_history.check_already_existing_split(key),value[2]) for key,value in valid_splits.items()}
+        valid_splits= {key: value for key,value in valid_splits.items() if value[1] is True}
+
         print("Valid splits: ", valid_splits)
         if valid_splits:
             split = max(valid_splits.items(), key=lambda x: x[1][2])
@@ -530,7 +537,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             return False
     
     def uniformity_test(self, n, R):
-        return (2 * n * R**2 > stats.chi2.ppf(0.995, 2))
+        return (2 * n * R**2 > stats.chi2.ppf(0.995, 1))
 
 
 
@@ -538,7 +545,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         test = False
         angle = self.compute_angle(left, right)
 
-        print("DEBUG:", left, right, angle)
+        #print("DEBUG:", left, right, angle)
         N = len(angle)
         C_1 = np.sum(np.cos(angle))
         S_1 = np.sum(np.sin(angle))
@@ -678,7 +685,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             self.gradient_history = []
             return
 
-        mean = np.mean(self.gradient_history[-n:])
+        mean = np.mean(self.gradient_history[-n:],axis=0)
         mean = np.linalg.norm(mean)
         print("Gradient mean: ", mean)
 
@@ -738,3 +745,31 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
         return
+    
+    
+    def update_gpomdp(
+            self, reward_vector: np.array,
+            score_trajectory: np.array
+    ) -> np.array:
+        gamma = self.env.gamma
+        horizon = self.env.horizon
+        gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
+        rolling_scores = np.cumsum(score_trajectory, axis=1) + 1e-10
+
+
+        if self.baselines == "avg":
+            b = np.mean(reward_vector[...,None], axis=0)
+        elif self.baselines == "peters":
+            b = np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=0) / np.sum(rolling_scores ** 2, axis=0)
+        else:
+            b = np.zeros(1)
+
+        reward_trajectory = (reward_vector[...,None] - b[np.newaxis,...]) * rolling_scores
+
+        not_avg_gradient = np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1)
+
+        estimated_gradient = np.mean(
+            np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
+            axis=0)
+
+        return estimated_gradient, not_avg_gradient

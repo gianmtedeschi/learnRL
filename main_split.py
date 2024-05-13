@@ -140,7 +140,7 @@ elif POL == "split_gaussian":
         parameters=np.ones(tot_params),
         dim_state=s_dim,
         dim_action=a_dim,
-        std_dev=0.45,
+        std_dev=0.1,
         std_decay=0,
         std_min=1e-6,
         multi_linear=MULTI_LINEAR,
