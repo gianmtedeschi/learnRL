@@ -124,10 +124,12 @@ class PolicyGradient:
             score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim),
                                     dtype=np.float64)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
+            
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
                 reward_vector[j, :] = res[j][TrajectoryResults.RewList]
                 score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
+            
             self.performance_idx[i] = np.mean(perf_vector)
 
             # Update best rho
@@ -138,13 +140,14 @@ class PolicyGradient:
                 estimated_gradient = np.mean(
                     perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
             elif self.estimator_type == "GPOMDP":
-                estimated_gradient, _ = self.update_gpomdp(
+                estimated_gradient = self.update_gpomdp(
                     reward_vector=reward_vector, score_trajectory=score_vector
                 )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
 
+            print(f"Estimated gradient: {estimated_gradient}")
             # Update parameters
             if self.lr_strategy == "constant":
                 self.thetas = self.thetas + self.lr * estimated_gradient
@@ -192,21 +195,19 @@ class PolicyGradient:
 
         
         if self.baselines == "avg":
-            b = np.mean(reward_vector[...,None], axis=1)
+            b = np.mean(reward_vector[...,None], axis=0)
         elif self.baselines == "peters":
-            b = np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=1) / np.sum(rolling_scores ** 2, axis=1)
+            b = np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=0) / np.sum(rolling_scores ** 2, axis=0)
         else:
             b = np.zeros(1)
 
-        reward_trajectory = (reward_vector[...,None] - b[:, np.newaxis, :]) * rolling_scores
-
-        not_avg_gradient = np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1)
+        reward_trajectory = (reward_vector[...,None] - b[np.newaxis,...]) * rolling_scores
         
         estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
 
-        return estimated_gradient, not_avg_gradient
+        return estimated_gradient
 
     def update_best_theta(self, current_perf: np.float64) -> None:
         if self.best_theta is None or self.best_performance_theta <= current_perf:
@@ -220,37 +221,6 @@ class PolicyGradient:
             print("#" * 30)
         return
 
-    """
-    def sample_deterministic_curve(self):
-        # make the policy deterministic
-        self.policy.std_dev = 0
-
-        # sample
-        for i in tqdm(range(self.ite)):
-            self.policy.set_parameters(thetas=self.theta_history[i, :])
-            worker_dict = dict(
-                env=copy.deepcopy(self.env),
-                pol=copy.deepcopy(self.policy),
-                dp=IdentityDataProcessor(),
-                params=copy.deepcopy(self.theta_history[i, :]),
-                starting_state=None
-            )
-            # build the parallel functions
-            delayed_functions = delayed(pg_sampling_worker)
-
-            # parallel computation
-            res = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                delayed_functions(**worker_dict) for _ in range(self.batch_size)
-            )
-
-            # extract data
-            ite_perf = np.zeros(self.batch_size, dtype=np.float64)
-            for j in range(self.batch_size):
-                ite_perf[j] = res[j][TrajectoryResults.PERF]
-
-            # compute mean
-            self.deterministic_curve[i] = np.mean(ite_perf)
-    """
 
     def save_results(self) -> None:
         results = {

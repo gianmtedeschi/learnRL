@@ -42,8 +42,8 @@ class Adam:
         step = self.alpha / (np.sqrt(v_hat) + self.epsilon) * m_hat
 
         if not local:
-            self.m = m
-            self.v = v
+            self.m = copy.deepcopy(m)
+            self.v = copy.deepcopy(v)
             self.ite = 0
         else:
             self.update_params(m, v, local=local)

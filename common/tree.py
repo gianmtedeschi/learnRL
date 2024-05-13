@@ -184,6 +184,13 @@ class BinaryTree:
 
         return vertex
 
+    def check_already_existing_split(self, value):
+        for Node in self.nodes:
+            if not self.is_leaf[Node.node_id] and Node.val is not None:
+                if Node.val[1] == value:
+                    return False
+        return True
+
     def _to_dot(self, node, dot):
         if node:
             dot.node(str(node.node_id), label=str(node.val))
