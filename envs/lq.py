@@ -28,8 +28,8 @@ class LQ(BaseEnv):
                  horizon=100,
                  gamma=0.9) -> None:
 
-        self.state_dim = 1  # state dimension
-        self.action_dim = 1  # action dimension
+        self.state_dim = 2  # state dimension
+        self.action_dim = 2  # action dimension
         self.horizon = horizon  # task horizon (reset is not automatic!)
         self.gamma = gamma  # discount factor
         self.max_pos = 10 * np.ones(self.state_dim)  # max state for clipping
