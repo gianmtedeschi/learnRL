@@ -171,6 +171,10 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         self.start_split = False
         self.gradient_history = []
         self.trial=0
+        # TESTING PURPOSES
+        self.split_grid = np.array([[0], [1], [-1],[2],[-2],[4],[-4],[8],[-8],[16],[-16]])
+
+        self.split_ite = []
 
         return
 
@@ -234,11 +238,11 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
                 self.update_parameters(estimated_gradient)
                 print("Gradient:",estimated_gradient)
             else:
-                if self.verbose:
-                    self.policy.history.print_tree()
-
-                self.policy.history.to_png(f"policy_tree")
-                splits += 1
+                name= self.directory + "/policy_tree"
+                self.policy.history.to_png(name)
+                splits +=1
+                self.split_ite.append(i)
+                
 
             # Log
             if self.verbose:
@@ -409,13 +413,18 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
             # update tree policy
             # self.policy.history.insert(best_split_thetas, self.father_id, best_split_state.item())
-            self.policy.history.insert(best_split_thetas, self.father_id, best_split_state)
+            self.policy.history.insert(np.array(best_split_thetas).ravel(), self.father_id, best_split_state)
 
             self.split_done = True
-            self.thetas = np.array(self.policy.history.get_current_policy()).ravel()
+            self.thetas = np.array(self.policy.history.get_current_policy())
             print("New thetas: ", self.thetas)
             self.policy.update_policy_params()
             self.dim = len(self.thetas)
+            # adam update
+            if self.lr_strategy == "adam":
+                index_of_split = list(splits.keys()).index(best_split_state)
+                self.adam_optimizer.update_params(local=False, coord=self.splitting_coordinate, index=index_of_split)
+                
 
             # index = np.argwhere(self.split_grid == best_split_state)
             # self.split_grid = np.delete(self.split_grid, index)
@@ -424,16 +433,18 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
     def update_parameters(self, estimated_gradient, local=False, split_state=None):
         new_theta = None
+        coord=None
         old_theta = self.thetas
         # Update parameters
         if split_state is not None:
             old_theta = self.policy.history.find_region_leaf(split_state).val[0]
+            coord = self.splitting_coordinate
 
         if self.lr_strategy == "constant":
             new_theta = old_theta + self.lr * estimated_gradient
 
         elif self.lr_strategy == "adam":
-            adaptive_lr = self.adam_optimizer.next(estimated_gradient)
+            adaptive_lr = self.adam_optimizer.next(estimated_gradient,coord=coord,local=local)
             new_theta = old_theta + adaptive_lr
         else:
             err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
@@ -443,6 +454,8 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             return new_theta
         else:
             self.thetas = new_theta
+            self.policy.history.update_all_leaves(self.thetas)
+            self.policy.history.to_png(self.directory + "/policy_tree")
 
     def compute_const(self, left, right):
         res = np.multiply(left, right)
@@ -713,7 +726,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
                 self.start_split = True
                 print("Optimal configuration found!")
-                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0],self.thetas[best_region])
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
                 
                 # save father id for future insert
                 # usefull structures
@@ -736,6 +749,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             "thetas_history": list(value.tolist() for value in self.theta_history.values()),
             "last_theta": np.array(self.thetas, dtype=float).tolist(),
             "best_perf": float(self.best_performance_theta),
+            "split_ite":self.split_ite
             # "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
         }
 
