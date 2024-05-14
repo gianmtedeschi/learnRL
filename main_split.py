@@ -87,7 +87,7 @@ num_test = 10
 if ENV == "lq":
     env_class = LQ
     env = LQ(horizon=horizon, gamma=gamma)
-    dir += f"lq_{horizon}_"
+    dir += f"lq_{horizon}_{env.state_dim}dim_"
 if ENV=="mountain_car":
     env_class=Continuous_MountainCarEnv
     env= Continuous_MountainCarEnv()

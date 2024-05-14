@@ -58,6 +58,18 @@ class BinaryTree:
 
         # increment used nodes by 2
         self.used += 2
+    
+    def update_all_leaves(self, param):
+        i = 0
+
+        if len(self.get_all_leaves()) != len(param):
+            print("[TREE POLICY] Number of parameters is different from number of leaves")
+            return
+        
+        for Node in self.nodes:
+            if self.is_leaf[Node.node_id]:
+                Node.val[0] = param[i]
+                i+=1
 
     def find_region_leaf(self, state):
         # begin from the root
