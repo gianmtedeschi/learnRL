@@ -393,7 +393,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             # print(estimated_gradient[0], estimated_gradient[1])
 
         valid_splits = {key: value for key, value in splits.items() if value[1] is True}
-        valid_splits={key:(value[0],self.policy_history.check_already_existing_split(key),value[2]) for key,value in valid_splits.items()}
+        valid_splits={key:(value[0],self.policy.history.check_already_existing_split(key),value[2]) for key,value in valid_splits.items()}
         valid_splits= {key: value for key,value in valid_splits.items() if value[1] is True}
 
         print("Valid splits: ", valid_splits)
@@ -537,7 +537,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             return False
     
     def uniformity_test(self, n, R):
-        return (2 * n * R**2 > stats.chi2.ppf(0.995, 1))
+        return (2 * n * R**2 > stats.chi2.ppf(0.995, 2))
 
 
 
@@ -746,7 +746,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             f.close()
         return
     
-    
+
     def update_gpomdp(
             self, reward_vector: np.array,
             score_trajectory: np.array

@@ -33,14 +33,14 @@ alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angl
 ALG = alg_selection[6]
 
 # environment
-horizon = 50
-gamma = 0.999
+horizon = 10
+gamma = 0.9
 RENDER = False
 
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 100
+ITE = 1000
 BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "constant"

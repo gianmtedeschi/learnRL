@@ -31,11 +31,11 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         super().__init__(parameters, std_dev)
 
         # Attributes with checks
-        err_msg = "[GaussPolicy] parameters is None!"
+        err_msg = "[TreePolicy] parameters is None!"
         assert parameters is not None, err_msg
         self.parameters = parameters
 
-        err_msg = "[GaussPolicy] standard deviation is negative!"
+        err_msg = "[TreePolicy] standard deviation is negative!"
         assert std_dev > 0, err_msg
         self.std_dev = std_dev
 
@@ -74,16 +74,23 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         # print("YOOOOOOOO", len(self.history.get_all_leaves()), leaf.val[0], self.tot_params)
 
         for position, Node in enumerate(self.history.get_all_leaves()):
-            if leaf.val[0].all() == Node.val[0].all():
+            """ if leaf.val[0].all() == Node.val[0].all():
                 scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
             else:
                 scores[position] = 0
             
             if True:
-                scores[position] = np.ravel(scores[position])
+                scores[position] = np.ravel(scores[position]) """
+            if np.all(leaf.val[0] == Node.val[0]):
+                scores[position] = np.ravel((action - leaf.val[0]) / (self.std_dev ** 2))
+            else:
+                scores[position] = 0
 
         # print(scores)
         return scores
 
     def update_policy_params(self):
         self.tot_params = len(self.history.get_all_leaves())
+    
+    def reduce_exploration(self):
+        self.std_dev= np.clip(self.std_dev - self.std_decay,self.std_min,np.inf)
