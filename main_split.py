@@ -19,8 +19,8 @@ import datetime
 # general
 MODE = "learn_test"
 
-# env_selection = ["lq", "mountain_car", "cartpole", "pendulum", "swimmer"]
-ENV = "lq"
+# env_selection = ["lq", "mountain_car", "cartpole", "pendulum", "swimmer", "ant", "half_cheetah"]
+ENV = "ant"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -29,8 +29,8 @@ alg_selection = ["pg", "split"]
 ALG = alg_selection[1]
 
 # environment
-horizon = 10
-gamma = 0.9
+horizon = 200
+gamma = 0.99
 RENDER = False
 
 # algorithm
@@ -39,7 +39,7 @@ NATURAL = False
 ITE = 1000
 BATCH = 100
 N_JOBS_PARAM = 8
-LR_STRATEGY = "adam"
+LR_STRATEGY = "constant"
 BASELINE = "peters"
 CHECKPOINT = 50
 MULTI_LINEAR = True
@@ -83,6 +83,14 @@ elif ENV == "swimmer":
     env_class = Swimmer
     env = Swimmer(horizon=horizon, gamma=gamma)
     dir += f"swimmer_{horizon}_"
+elif ENV == "ant":
+    env_class = Ant
+    env = Ant(horizon=horizon, gamma=gamma)
+    dir += f"ant_{horizon}_"
+elif ENV == "half_cheetah":
+    env_class = HalfCheetah
+    env = HalfCheetah(horizon=horizon, gamma=gamma)
+    dir += f"half_cheetah_{horizon}_"
 else:
     raise NotImplementedError
 
