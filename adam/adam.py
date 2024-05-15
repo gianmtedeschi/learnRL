@@ -48,7 +48,7 @@ class Adam:
         else:
             self.update_params(m, v, local=local)
 
-        return step.ravel()
+        return step
     
     def update_params(self, m=None, v=None, local=False, coord=None, index=None):
         if local:

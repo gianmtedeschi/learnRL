@@ -48,3 +48,4 @@ class Swimmer(MujocoBase):
         else:
             clipped_action = action
         return super().step(action=clipped_action)
+        # return super().step(action=action)

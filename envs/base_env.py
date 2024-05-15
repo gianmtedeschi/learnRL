@@ -28,11 +28,13 @@ class BaseEnv(ABC):
 
     @abstractmethod
     def step(self, action):
+        """todo"""
         pass
 
-    @abstractmethod
-    def reset(self) -> None:
-        pass
+    def reset(self, seed=None) -> None:
+        """todo"""
+        self.time = 0
+
 
 
 class MujocoBase(BaseEnv, ABC):
@@ -50,12 +52,12 @@ class MujocoBase(BaseEnv, ABC):
         self.seed = seed
 
     def step(self, action):
-        obs, reward, done, _, _ = self.gym_env.step(action)
+        obs, reward, done, info, _ = self.gym_env.step(action)
         self.state = copy.deepcopy(obs)
-        return obs, reward, done, None
+        return obs, reward, done, info
 
-    def reset(self):
-        obs = self.gym_env.reset(self.seed)
+    def reset(self, seed=None):
+        obs = self.gym_env.reset(seed=seed)
         self.state = copy.deepcopy(obs[0])
         return obs
 
@@ -70,3 +72,6 @@ class MujocoBase(BaseEnv, ABC):
 
     def sample_state(self, args: dict = None):
         return self.gym_env.observation_space.sample()
+    
+    def set_state(self, state):
+        pass

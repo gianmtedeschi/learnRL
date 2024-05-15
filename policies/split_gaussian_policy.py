@@ -56,31 +56,29 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
             mean = self.parameters
             action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
 
-        mean = self.history.find_region_leaf(state)
+        mean = self.history.find_region_leaf(state, policy=True)
         if mean is None:
             action = np.random.normal(self.history.root.val[0], np.identity(1) * self.std_dev)
         else:
             action = np.random.normal(mean.val[0], np.identity(1) * self.std_dev)
 
-        return action
+        return action.ravel()
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:
             return super().compute_score(state, action)
         
-        scores = np.zeros(self.tot_params)
-        leaf = self.history.find_region_leaf(state)
+        scores = np.zeros((len(self.history.get_all_leaves()), self.tot_params))
+        
+        # scores = np.zeros(self.tot_params)
+        leaf = self.history.find_region_leaf(state, policy=True)
 
         for position, Node in enumerate(self.history.get_all_leaves()):
             if np.all(leaf.val[0] == Node.val[0]):
-                scores[position] = np.ravel((action - leaf.val[0]) / (self.std_dev ** 2))
-            else:
-                scores[position] = 0
+                #TODO np.ravel
+                scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
         
         return scores
-
-    def update_policy_params(self):
-        self.tot_params = len(self.history.get_all_leaves())
     
     def reduce_exploration(self):
         self.std_dev = np.clip(self.std_dev - self.std_decay, self.std_min, np.inf)

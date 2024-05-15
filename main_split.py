@@ -13,13 +13,14 @@ from art import *
 import torch
 import torch.nn as nn
 import json
+import datetime
 
 """Global Vars"""
 # general
 MODE = "learn_test"
 
-# env_selection = ["lq", "swimmer", "cartpole"]
-ENV = "cartpole"
+# env_selection = ["lq", "mountain_car", "cartpole", "pendulum", "swimmer"]
+ENV = "lq"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -28,8 +29,8 @@ alg_selection = ["pg", "split"]
 ALG = alg_selection[1]
 
 # environment
-horizon = 100
-gamma = 0.999
+horizon = 10
+gamma = 0.9
 RENDER = False
 
 # algorithm
@@ -38,22 +39,24 @@ NATURAL = False
 ITE = 1000
 BATCH = 100
 N_JOBS_PARAM = 8
-LR_STRATEGY = "constant"
-BASELINE = "avg"
+LR_STRATEGY = "adam"
+BASELINE = "peters"
+CHECKPOINT = 50
+MULTI_LINEAR = True
 
 if ALG == "split":
     dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/split/split_test_{ITE}_"
     ESTIMATOR = "GPOMDP"
 else:
     dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/pg/pg_test_{ITE}_"
-    ESTIMATOR = "REINFORCE"
+    ESTIMATOR = "GPOMDP"
 
 if LR_STRATEGY == "adam":
-    INIT_LR = 1e-3
-    dir += "adam_0001_"
+    INIT_LR = 1e-1
+    dir += "adam_001_"
 else:
     INIT_LR = 1e-3
-    dir += "clr_00001_"
+    dir += "clr_0001_"
 
 # test
 test_ite = horizon
@@ -68,12 +71,23 @@ elif ENV == "cartpole":
     env_class = ContCartPole
     env = ContCartPole(horizon=horizon, gamma=gamma)
     dir += f"cartpole_{horizon}_"
+elif ENV == "mountain_car":
+    env_class = Continuous_MountainCarEnv
+    env = Continuous_MountainCarEnv(horizon=horizon)
+    dir += f"mountain_car_{horizon}_"
+elif ENV == "pendulum":
+    env_class = PendulumEnv
+    env = PendulumEnv(horizon=horizon)
+    dir += f"pendulum_{horizon}_"
+elif ENV == "swimmer":
+    env_class = Swimmer
+    env = Swimmer(horizon=horizon, gamma=gamma)
+    dir += f"swimmer_{horizon}_"
 else:
     raise NotImplementedError
 
 s_dim = env.state_dim
 a_dim = env.action_dim
-MULTI_LINEAR = False
 
 
 """Data Processor"""
@@ -108,10 +122,10 @@ elif POL == "split_gaussian":
         parameters=np.ones(tot_params),
         dim_state=s_dim,
         dim_action=a_dim,
-        std_dev=0.3,
+        std_dev=0.1,
         std_decay=0,
         std_min=1e-6,
-        multi_linear=MULTI_LINEAR,
+        multi_linear=False,
         constant=True
     )
     dir += f"split_policy_{tot_params}_var_01"
@@ -133,7 +147,7 @@ elif POL == "nn":
         output_size=a_dim,
         model=copy.deepcopy(net),
         model_desc=copy.deepcopy(model_desc),
-        std_dev=0.1,
+        std_dev=2,
         std_decay=0,
         std_min=1e-6
     )
@@ -142,6 +156,7 @@ elif POL == "nn":
 else:
     raise NotImplementedError
 
+dir+= "_" + datetime.datetime.now().strftime("%y_%m_%d-%H_%M_")
 
 """Algorithms"""
 if ALG == "pg":
@@ -158,16 +173,16 @@ if ALG == "pg":
         directory=dir,
         verbose=DEBUG,
         natural=NATURAL,
-        checkpoint_freq=100,
+        checkpoint_freq=CHECKPOINT,
         n_jobs=N_JOBS_PARAM,
-        baselines=None,
+        baselines=BASELINE,
     )
     alg = PolicyGradient(**alg_parameters)
 else:
     alg_parameters = dict(
         lr=[INIT_LR],
         lr_strategy=LR_STRATEGY,
-        estimator_type="GPOMDP",
+        estimator_type=ESTIMATOR,
         initial_theta=[0] * tot_params,
         ite=ITE,
         batch_size=BATCH,
@@ -177,16 +192,17 @@ else:
         directory=dir,
         verbose=DEBUG,
         natural=NATURAL,
-        checkpoint_freq=100,
+        checkpoint_freq=CHECKPOINT,
         n_jobs=N_JOBS_PARAM,
         baselines=BASELINE,
         split_grid=None
     )
     alg = PolicyGradientSplit(**alg_parameters)
 
+
 if __name__ == "__main__":
     # Learn phase
-    print(text2art("== LQ =="))
+    print(text2art("== ADAPTIVE POLICIES =="))
     if MODE in ["learn", "learn_test"]:
         print(text2art("Learn Start"))
         alg.learn()

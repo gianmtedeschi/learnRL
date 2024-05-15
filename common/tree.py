@@ -63,20 +63,20 @@ class BinaryTree:
         i = 0
 
         if len(self.get_all_leaves()) != len(param):
-            print("[TREE POLICY] Number of parameters is different from number of leaves")
+            print("[TREE POLICY] Number of parameters is different from number of leaves", len(self.get_all_leaves()), len(param))
             return
         
         for Node in self.nodes:
             if self.is_leaf[Node.node_id]:
                 Node.val[0] = param[i]
-                i+=1
-
-    def find_region_leaf(self, state):
+                i += 1
+        
+    def find_region_leaf(self, state, policy=False):
         # begin from the root
         current_node = 0
 
         while(self.is_leaf[current_node] == False):
-            if self.find_direction(state, current_node) == 0: 
+            if self.find_direction(state, current_node, policy) == 0: 
                 current_node = self.nodes[current_node].id_left
                 # self.to_list(self.nodes[current_node])
             else:
@@ -85,30 +85,59 @@ class BinaryTree:
 
         return self.nodes[current_node]
 
-    def find_direction(self, state, current_node):
+    def find_direction(self, state, current_node, policy):
         """
         Return the direction of the split based on the axis of the split point
 
-        state = current state observed
+        state = [axis, point]
         current_node = current node id
 
         return 0 if the state is on the left of the split point
         """
-        # split is described by the tuple [axis, value]
+        # # split is described by the tuple [axis, value]
+        # split = self.nodes[current_node].val[1]
+
+        # if state[0] != split[0]:
+        #     state_value = 0
+        # else:
+        #     state_value = state[1]
+
+        # if state_value < split[1]:
+        #     # 0 is left
+        #     return 0
+        # else:
+        #     # 1 is right
+        #     return 1
         split = self.nodes[current_node].val[1]
+        if policy: 
+            # Check if state is a scalar
+            if len(state) == 1:
+                state_value = state
+            else:
+                state_value = state[split[0]]
 
-        # Check if state is a scalar
-        if state.size == 1:
-            state_value = state
+            if state_value < split[1]:
+                # 0 is left
+                return 0
+            else:
+                # 1 is right
+                return 1
         else:
-            state_value = state[split[0]]
+            if len(state) == 1:
+                point = state
+            else:
+                axis = state[0]
+                point = state[1]
 
-        if state_value < split[1]:
-            # 0 is left
-            return 0
-        else:
-            # 1 is right
-            return 1
+                if axis != split[0]:
+                    state = 0
+                else:
+                    state = point
+            
+            if point < split[1]:
+                return 0
+            else:
+                return 1
 
     def get_current_policy(self):
         res = []
