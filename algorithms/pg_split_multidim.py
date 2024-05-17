@@ -83,7 +83,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             split_grid: np.array = None,
-            max_splits: int = 100,
+            max_splits: int = 10,
             baselines: str = None
     ) -> None:
         # Class' parameter with checks
@@ -103,7 +103,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         assert initial_theta is not None, err_msg
         self.thetas = np.array(initial_theta)
         self.dim = len(self.thetas)
-        print(self.thetas, self.dim)
+        #print(self.thetas, self.dim)
 
         err_msg = "[PG_split] env is None."
         assert env is not None, err_msg
@@ -162,8 +162,13 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
         self.max_splits = max_splits
         self.split_done = False
         self.start_split = False
-        self.trial=0
         self.gradient_history = []
+
+        self.trial=0
+        # TESTING PURPOSES
+        self.split_grid = np.array([[0], [1], [-1],[2],[-2],[4],[-4],[8],[-8],[16],[-16]])
+
+        self.split_ite = []
 
         return
 
@@ -201,7 +206,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
                 if axis == self.dim_state:
                     axis = 0
                 # Compute the split grid
-                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=20)
+                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=50)
                 print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
                 
                 # Start the split procedure
@@ -223,14 +228,14 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
                     err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                     raise NotImplementedError(err_msg)
 
-                self.gradient_history.append(estimated_gradient)
+                self.gradient_history.append(estimated_gradient.ravel())
                 self.update_parameters(estimated_gradient)
             else:
-                if self.verbose:
-                    self.policy.history.print_tree()
-
-                self.policy.history.to_png(f"policy_tree")
-                splits += 1
+                name=self.directory + "/policy_tree"
+                self.policy.history.to_png(name)
+                splits +=1
+                self.split_ite.append(i)
+                
 
             # Log
             if self.verbose:
@@ -259,6 +264,10 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             # check if we reached an optimal configuration
             if splits < self.max_splits:
                 self.check_local_optima(not_avg_gradient)
+            else:
+                print("Max splits reached!")
+                self.split_done= False
+                
         return
 
     def split(self, score_vector, state_vector, reward_vector, split_state) -> list:

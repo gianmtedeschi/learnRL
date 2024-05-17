@@ -23,8 +23,8 @@ import json
 # general
 MODE = "learn_test"
 
-# env_selection = ["lq", "swimmer", "cartpole","mountain_car"]
-ENV = "lq"
+# env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah"]
+ENV = "pendulum"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -33,8 +33,8 @@ alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angl
 ALG = alg_selection[6]
 
 # environment
-horizon = 10
-gamma = 0.9
+horizon = 200
+gamma = 0.99
 RENDER = False
 
 # algorithm
@@ -88,21 +88,36 @@ if ENV == "lq":
     env_class = LQ
     env = LQ(horizon=horizon, gamma=gamma)
     dir += f"lq_{horizon}_{env.state_dim}dim_"
-if ENV=="mountain_car":
-    env_class=Continuous_MountainCarEnv
-    env= Continuous_MountainCarEnv()
-    dir +=f"mountaincar_{horizon}_"
-
-if ENV == "cartpole":
+elif ENV == "cartpole":
     env_class = ContCartPole
     env = ContCartPole(horizon=horizon, gamma=gamma)
     dir += f"cartpole_{horizon}_"
-#else:
-#    raise NotImplementedError
+elif ENV == "mountain_car":
+    env_class = Continuous_MountainCarEnv
+    env = Continuous_MountainCarEnv(horizon=horizon)
+    dir += f"mountain_car_{horizon}_"
+elif ENV == "pendulum":
+    env_class = PendulumEnv
+    env = PendulumEnv(horizon=horizon)
+    dir += f"pendulum_{horizon}_"
+elif ENV == "swimmer":
+    env_class = Swimmer
+    env = Swimmer(horizon=horizon, gamma=gamma)
+    dir += f"swimmer_{horizon}_"
+elif ENV == "ant":
+    env_class = Ant
+    env = Ant(horizon=horizon, gamma=gamma)
+    dir += f"ant_{horizon}_"
+elif ENV == "half_cheetah":
+    env_class = HalfCheetah
+    env = HalfCheetah(horizon=horizon, gamma=gamma)
+    dir += f"half_cheetah_{horizon}_"
+else:
+    raise NotImplementedError
 
 s_dim = env.state_dim
 a_dim = env.action_dim
-MULTI_LINEAR = False
+
 
 
 
@@ -143,7 +158,7 @@ elif POL == "split_gaussian":
         std_dev=0.1,
         std_decay=0,
         std_min=1e-6,
-        multi_linear=MULTI_LINEAR,
+        multi_linear=False,
         constant=True
     )
     sd=pol.std_dev
