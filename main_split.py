@@ -19,18 +19,18 @@ import datetime
 # general
 MODE = "learn_test"
 
-# env_selection = ["lq", "mountain_car", "cartpole", "pendulum", "swimmer", "ant", "half_cheetah"]
-ENV = "ant"
+# env_selection = ["lq", "mountain_car", "cartpole", "pendulum", "swimmer", "ant", "half_cheetah", "hopper"]
+ENV = "lq"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
-POL = "split_gaussian"
+POL = "gaussian"
 
 alg_selection = ["pg", "split"]
-ALG = alg_selection[1]
+ALG = alg_selection[0]
 
 # environment
-horizon = 200
-gamma = 0.99
+horizon = 10
+gamma = 0.9
 RENDER = False
 
 # algorithm
@@ -45,17 +45,17 @@ CHECKPOINT = 50
 MULTI_LINEAR = True
 
 if ALG == "split":
-    dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/split/split_test_{ITE}_"
+    dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results_debug/split/split_test_{ITE}_"
     ESTIMATOR = "GPOMDP"
 else:
-    dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results/pg/pg_test_{ITE}_"
+    dir = f"/Users/gianmarcotedeschi/Projects/learnRL/results_debug/pg/pg_test_{ITE}_"
     ESTIMATOR = "GPOMDP"
 
 if LR_STRATEGY == "adam":
-    INIT_LR = 1e-1
+    INIT_LR = 1e-2
     dir += "adam_001_"
 else:
-    INIT_LR = 1e-3
+    INIT_LR = 1e-5
     dir += "clr_0001_"
 
 # test
@@ -65,7 +65,7 @@ num_test = 10
 """Environment"""
 if ENV == "lq":
     env_class = LQ
-    env = LQ(horizon=horizon, gamma=gamma)
+    env = LQ(horizon=horizon, gamma=gamma, action_dim=2, state_dim=2)
     dir += f"lq_{horizon}_"
 elif ENV == "cartpole":
     env_class = ContCartPole
@@ -91,6 +91,10 @@ elif ENV == "half_cheetah":
     env_class = HalfCheetah
     env = HalfCheetah(horizon=horizon, gamma=gamma)
     dir += f"half_cheetah_{horizon}_"
+elif ENV == "hopper":
+    env_class = Hopper
+    env = Hopper(horizon=horizon, gamma=gamma)
+    dir += f"hopper_{horizon}_"
 else:
     raise NotImplementedError
 
@@ -133,8 +137,6 @@ elif POL == "split_gaussian":
         std_dev=0.1,
         std_decay=0,
         std_min=1e-6,
-        multi_linear=False,
-        constant=True
     )
     dir += f"split_policy_{tot_params}_var_01"
 elif POL == "nn":
@@ -211,6 +213,7 @@ else:
 if __name__ == "__main__":
     # Learn phase
     print(text2art("== ADAPTIVE POLICIES =="))
+    print(text2art(ENV))
     if MODE in ["learn", "learn_test"]:
         print(text2art("Learn Start"))
         alg.learn()

@@ -22,8 +22,6 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
             std_min: float = 1e-4,
             dim_state: int = 1,
             dim_action: int = 1,
-            multi_linear: bool = False,
-            constant: bool = True,
             history: BinaryTree = BinaryTree()
 
     ) -> None:
@@ -42,8 +40,6 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         # Additional attributes
         self.dim_state = dim_state
         self.dim_action = dim_action
-        self.multi_linear = multi_linear
-        self.constant = constant
         self.std_decay = std_decay
         self.std_min = std_min
 

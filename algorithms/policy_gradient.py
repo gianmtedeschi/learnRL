@@ -1,5 +1,4 @@
 """Policy Gradient Implementation"""
-# todo natural
 # todo baseline
 
 # imports
@@ -147,7 +146,7 @@ class PolicyGradient:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
 
-            print(f"Estimated gradient: {estimated_gradient}")
+            print(f"Estimated gradient: {estimated_gradient}, {estimated_gradient.shape}")
             # Update parameters
             if self.lr_strategy == "constant":
                 self.thetas = self.thetas + self.lr * estimated_gradient
@@ -202,11 +201,12 @@ class PolicyGradient:
             b = np.zeros(1)
 
         reward_trajectory = (reward_vector[...,None] - b[np.newaxis,...]) * rolling_scores
-        
+
         estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
 
+        # print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, estimated_gradient.shape)
         return estimated_gradient
 
     def update_best_theta(self, current_perf: np.float64) -> None:

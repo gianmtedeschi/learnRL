@@ -26,10 +26,12 @@ class LQ(BaseEnv):
 
     def __init__(self,
                  horizon=100,
-                 gamma=0.9) -> None:
+                 gamma=0.9,
+                 action_dim=1,
+                 state_dim=1) -> None:
 
-        self.state_dim = 2  # state dimension
-        self.action_dim = 2  # action dimension
+        self.state_dim = state_dim  # state dimension
+        self.action_dim = action_dim  # action dimension
         self.horizon = horizon  # task horizon (reset is not automatic!)
         self.gamma = gamma  # discount factor
         self.max_pos = 10 * np.ones(self.state_dim)  # max state for clipping

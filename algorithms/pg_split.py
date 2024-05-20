@@ -76,7 +76,7 @@ class PolicyGradientSplit(PolicyGradient):
     def __init__(
             self, lr: np.array = None,
             lr_strategy: str = "constant",
-            estimator_type: str = "REINFORCE",
+            estimator_type: str = "GPOMDP",
             initial_theta: np.array = None,
             ite: int = 100,
             batch_size: int = 1,
@@ -89,8 +89,9 @@ class PolicyGradientSplit(PolicyGradient):
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             split_grid: np.array = None,
-            max_splits: int = 10,
-            baselines: str = None
+            max_splits: int = 1000,
+            baselines: str = None,
+            alpha: float = 0.1
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG_split] lr must be positive!"
@@ -172,6 +173,7 @@ class PolicyGradientSplit(PolicyGradient):
         self.delta = 0
         self.split_ite = []
         self.trial = 0
+        self.alpha = alpha
 
         # TESTING PURPOSES
         self.split_grid = np.array([[0], [1], [-1],[2],[-2],[4],[-4],[8],[-8],[16],[-16]])
@@ -214,7 +216,7 @@ class PolicyGradientSplit(PolicyGradient):
                 if axis == self.dim_state:
                     axis = 0
                 # Compute the split grid
-                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=30)
+                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=50)
                 print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
                 
                 # Start the split procedure
@@ -377,7 +379,7 @@ class PolicyGradientSplit(PolicyGradient):
             
             key = tuple([axis, self.split_grid[i][axis]])  
             
-            if self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1]):
+            if self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1], self.alpha):
             # if(True):
                 splits[key] = [thetas, True, gradient_norm]
             else:
@@ -475,7 +477,7 @@ class PolicyGradientSplit(PolicyGradient):
 
         return (test < 0)
 
-    def check_split_bernstein_ci(self, left, right, delta=0.3):
+    def check_split_bernstein_ci(self, left, right, delta=0.1):
         z_left = np.var(left)
         z_right = np.var(right)
 
@@ -512,7 +514,7 @@ class PolicyGradientSplit(PolicyGradient):
     def uniformity_test(self, n, R):
         return (2 * n * R**2 > stats.chi2.ppf(0.995, 2))
 
-    def check_split_von_mises(self, left, right, alpha=0.1):
+    def check_split_von_mises(self, left, right, alpha):
         
         test = False
         angle = self.compute_angle(left, right)
@@ -620,7 +622,7 @@ class PolicyGradientSplit(PolicyGradient):
 
         print("Delta gradient mean: ", delta)
 
-        if np.isclose(delta, 0, atol=1e-1):
+        if np.isclose(delta, 0, atol=1):
             # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0)
             best_region = np.argmax(np.sum(var, axis=1))
