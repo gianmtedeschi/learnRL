@@ -51,7 +51,7 @@ class GaussianPolicy(BasePolicy, ABC):
     def draw_action(self, state) -> float:
         if state.size != self.dim_state:
             err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
-            err_msg += f"\n{len(state)} vs. {self.dim_state}"
+            err_msg += f"\n{len(state)} vs. {self.dim_state} {state}"
             raise ValueError(err_msg)
 
         if state.size == 1:
@@ -80,8 +80,9 @@ class GaussianPolicy(BasePolicy, ABC):
 
         state = np.ravel(state)
         action_deviation = action - (self.parameters @ state)
+        
         if self.multi_linear:
-            state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
+            # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
             action_deviation = action_deviation[:, np.newaxis]
 
         scores = (action_deviation * state) / (self.std_dev ** 2)

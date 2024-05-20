@@ -86,7 +86,7 @@ num_test = 10
 """Environment"""
 if ENV == "lq":
     env_class = LQ
-    env = LQ(horizon=horizon, gamma=gamma)
+    env = LQ(horizon=horizon, gamma=gamma,action_dim=2, state_dim=2)
     dir += f"lq_{horizon}_{env.state_dim}dim_"
 elif ENV == "cartpole":
     env_class = ContCartPole
