@@ -67,12 +67,15 @@ if ALG=="split_VM":
 
 if ALG== "split_multi_dim":
     dir=f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split_multi_dim/split_multi_dim_{ITE}_"
+    ESTIMATOR = "GPOMDP"
 
 if ALG=="angles_multi_dim":
     dir=f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split_angles_multi_dim/split_angles_multi_dim_{ITE}_"
+    ESTIMATOR = "GPOMDP"
 
 if ALG=="VM_multi_dim":
     dir=f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split_VM_multi_dim/split_VM_multi_dim_{ITE}_"
+    ESTIMATOR = "GPOMDP"
 
 
 if LR_STRATEGY == "adam":
