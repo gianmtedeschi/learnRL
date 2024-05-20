@@ -34,7 +34,7 @@ ALG = alg_selection[6]
 
 # environment
 horizon = 10
-gamma = 0.99
+gamma = 0.9
 RENDER = False
 
 # algorithm
@@ -44,7 +44,9 @@ ITE = 1000
 BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "constant"
-BASELINE = "avg"
+BASELINE = "peters"
+CHECKPOINT=50
+MULTI_LINEAR=True
 
 if ALG == "split":
     dir = f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/results/split/split_test_{ITE}_"
@@ -73,11 +75,11 @@ if ALG=="VM_multi_dim":
 
 
 if LR_STRATEGY == "adam":
-    INIT_LR = 1e-3
-    dir += "adam_0001_"
+    INIT_LR = 1e-2
+    dir += "adam_001_"
 else:
-    INIT_LR = 1e-3
-    dir += "clr_00001_"
+    INIT_LR = 1e-5
+    dir += "clr_0001_"
 
 # test
 test_ite = horizon
@@ -192,6 +194,8 @@ elif POL == "nn":
     dir += f"nn_policy_{tot_params}_var_01"
 else:
     raise NotImplementedError
+
+dir+= "_" + datetime.datetime.now().strftime("%y_%m_%d-%H_%M_")
 
 
 """Algorithms"""
@@ -323,7 +327,7 @@ if ALG=="VM_multi_dim":
     alg_parameters = dict(
         lr=[INIT_LR],
         lr_strategy=LR_STRATEGY,
-        estimator_type="GPOMDP",
+        estimator_type=ESTIMATOR,
         initial_theta=[0] * tot_params,
         ite=ITE,
         batch_size=BATCH,
@@ -333,7 +337,7 @@ if ALG=="VM_multi_dim":
         directory=dir,
         verbose=DEBUG,
         natural=NATURAL,
-        checkpoint_freq=100,
+        checkpoint_freq=CHECKPOINT,
         n_jobs=N_JOBS_PARAM,
         baselines=BASELINE,
         split_grid=None
@@ -347,7 +351,7 @@ if __name__ == "__main__":
     print(text2art("== ADAPTIVE POLICIES =="))
     print(text2art(ENV))
     if MODE in ["learn", "learn_test"]:
-        
+        print(text2art("Learn Start"))
         alg.learn()
         alg.save_results()
         print(alg.performance_idx)

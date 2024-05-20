@@ -420,8 +420,8 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             best_split_state = split[0]
 
             #if self.verbose:
-            #    print("Split result: ", best_split_thetas)
-            #    print("Split state: ", best_split_state)
+            print("Split result: ", best_split_thetas)
+            print("Split state: ", best_split_state)
 
             # update tree policy
             # self.policy.history.insert(best_split_thetas, self.father_id, best_split_state.item())
@@ -475,64 +475,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
         return np.sqrt(var * 1.96)
 
-    # todo fai moltiplicazione element wise, poi argmin e splitta e rigenera griglia solo su spazio parametro
-    # todo con gradienti più negativi
-    # def check_local_optima(self) -> None:
-    #     if len(self.gradient_history) <= 1:
-    #         self.start_split = False
-    #         return
-
-    #     # Case where a split just happened so no need to check for local optima
-    #     # Reset gradient history to match the new number of parameters
-    #     if self.split_done:
-    #         self.start_split = False
-    #         self.split_done = False
-    #         self.gradient_history = []
-    #         return
-
-    #     latest_two = self.gradient_history[-2:]
-    #     # res = np.multiply(latest_two[0], latest_two[1])
-    #     # res = np.dot(latest_two[0], latest_two[1])
-    #     #
-    #     # self.start_split = all(val < 0 for val in res)
-    #     #
-    #     # self.start_split = res < 0
-    #     # if self.start_split:
-    #     #     print("Optimal configuration found!")
-    #     if np.dot(latest_two[0], latest_two[1]) < 0:
-    #         res = np.multiply(latest_two[0], latest_two[1])
-    #         best_region = np.argmin(res)
-
-    #         # print("AO ANNAMO***************: ", latest_two[0], latest_two[1], latest_two[0].dtype, latest_two[1].dtype)
-    #         if latest_two[0].size == 1:
-    #             self.start_split = True
-    #             print("Optimal configuration found!")
-    #         else:
-    #             self.start_split = True
-    #             print("Optimal configuration found!")
-    #             print("Splitting on param side: ", res[best_region])
-    #             split_point = self.policy.history.get_father(best_region)
-    #             # self.split_grid = np.linspace(split_point.val[1], -split_point.val[1], 10)
-    #     else:
-    #         self.start_split = False
     
-    # def compute_p(self, left, right):
-    #     p = np.multiply(left, right)
-    #     return p
-
-    # def check_split(self, left, right, delta=0.3):
-    #     p = self.compute_p(left, right)
-    #     z = np.var(p)
-    #     sup = np.max(p)
-        
-    #     test = np.sqrt((2 * z * np.log(2/delta))/self.batch_size) + (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup) + - np.mean(p)
-    #     term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
-    #     term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
-    #     term3 = np.mean(p)
-
-    #     print("************************", term1, term2, term3)
-
-    #     return (test < 0)
 
     def compute_p(self, left, right):
         p = np.multiply(left, right)
@@ -567,6 +510,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
 
     def check_split(self, left, right, alpha):
+
         test = False
         angle = self.compute_angle(left, right)
 
@@ -665,7 +609,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         
         # Generate the grid based on the valid region
         tmp_grid = tmp_grid * mask
-        #print("tmp_grid=,",tmp_grid)
+        
 
         # Convert each unique tuple back to an array and set a value only in the position defined by axis
         self.split_grid = np.unique(np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid]), axis=0)
@@ -723,7 +667,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
                 
                 self.start_split = True
                 print("Optimal configuration found!")
-                #print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
+                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
 
                 # usefull structures
                 self.father_id = self.policy.history.get_all_leaves()[best_region].node_id
