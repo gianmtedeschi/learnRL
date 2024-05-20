@@ -77,7 +77,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
     def __init__(
             self, lr: np.array = None,
             lr_strategy: str = "constant",
-            estimator_type: str = "REINFORCE",
+            estimator_type: str = "GPOMDP",
             initial_theta: np.array = None,
             ite: int = 100,
             batch_size: int = 1,
@@ -90,8 +90,10 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             split_grid: np.array = None,
-            max_splits: int = 10,
-            baselines: str = None
+            max_splits: int = 1000,
+            baselines: str = None,
+            alpha: float= 0.1
+
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG_split] lr must be positive!"
@@ -173,6 +175,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         self.delta=0
         self.split_ite=[]
         self.trial=0
+        self.alpha= alpha
         # TESTING PURPOSES
         self.split_grid = np.array([[0], [1], [-1],[2],[-2],[4],[-4],[8],[-8],[16],[-16]])
 
@@ -215,7 +218,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
                 if axis == self.dim_state:
                     axis = 0
                 # Compute the split grid
-                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=30)
+                self.generate_grid(states_vector=state_vector, axis=axis, num_samples=50)
                 print("Split grid: ", self.split_grid, self.split_grid.shape, self.split_grid.dtype)
                 
                 # Start the split procedure
@@ -393,7 +396,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             
             key = tuple([axis, self.split_grid[i][axis]])  
             
-            if self.check_split(reward_trajectory[0], reward_trajectory[1]):
+            if self.check_split(reward_trajectory[0], reward_trajectory[1],self.alpha):
                 splits[key] = [thetas, True, gradient_norm]
 
             else:
@@ -563,7 +566,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
 
 
-    def check_split(self, left, right, alpha=0.1):
+    def check_split(self, left, right, alpha):
         test = False
         angle = self.compute_angle(left, right)
 
@@ -678,29 +681,32 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
         return new_arr
 
     def check_local_optima(self, not_avg_gradient, n=10) -> None:
-        
-
         # Case where a split just happened so no need to check for local optima
         # Reset gradient history to match the new number of parameters
         if self.split_done:
             self.start_split = False
             self.split_done = False
-            self.splitting_coordinate= None
-            self.trial=0
-            self.gradient_sum=0
+            self.splitting_coordinate = None
+            self.trial = 0
+            self.gradient_sum = 0
             return
 
-        delta=np.linalg.norm(self.delta)
-        self.delta=0
+        
+        # mean = np.mean(self.gradient_history[-n:], axis=0)
+        # self.mean = self.gradient_sum/self.ite
+        
+        delta = np.linalg.norm(self.delta)
+        self.delta = 0
+
         print("Delta gradient mean: ", delta)
 
-        if np.isclose(delta, 0, atol=1e-1):
+        if np.isclose(delta, 0, atol=1):
             # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0)
-            best_region = np.argmax(np.sum(var,axis=1))
+            best_region = np.argmax(np.sum(var, axis=1))
             print("Variance: ", var)
 
-            # scalar case
+            # first iteration case
             if len(var) == 1:
                 self.start_split = True
                 
@@ -712,25 +718,24 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
             # multidimensional case
             else:
                 if best_region == self.splitting_coordinate and self.trial != 0:
-                    print("Same region,changing trial")
+                    print("Same region, changing trial")
                     best_region = np.argsort(np.sum(var, axis=1))[::-1][(self.splitting_coordinate + self.trial) % len(var)]
-
+                
                 self.start_split = True
                 print("Optimal configuration found!")
-                print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
-                
-                
-                self.father_id = self.policy.history.get_all_leaves()[best_region].node_id
+                #print("Splitting on param side: ", self.policy.history.get_all_leaves()[best_region].val[0])
 
-                
-                
+                # usefull structures
+                self.father_id = self.policy.history.get_all_leaves()[best_region].node_id
                 self.splitting_param = self.policy.history.get_all_leaves()[best_region]
                 self.splitting_coordinate = best_region
-                self.trial +=1
+                self.trial += 1
 
             self.start_split = True
         else:
             self.start_split = False
+
+
 
     def save_results(self) -> None:
         results = {

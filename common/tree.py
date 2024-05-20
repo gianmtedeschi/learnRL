@@ -58,7 +58,7 @@ class BinaryTree:
 
         # increment used nodes by 2
         self.used += 2
-    
+
     def update_all_leaves(self, param):
         i = 0
 
@@ -70,13 +70,13 @@ class BinaryTree:
             if self.is_leaf[Node.node_id]:
                 Node.val[0] = param[i]
                 i += 1
-
-    def find_region_leaf(self, state,policy=False):
+        
+    def find_region_leaf(self, state, policy=False):
         # begin from the root
         current_node = 0
 
         while(self.is_leaf[current_node] == False):
-            if self.find_direction(state, current_node,policy) == 0: 
+            if self.find_direction(state, current_node, policy) == 0: 
                 current_node = self.nodes[current_node].id_left
                 # self.to_list(self.nodes[current_node])
             else:
@@ -85,17 +85,18 @@ class BinaryTree:
 
         return self.nodes[current_node]
 
-    def find_direction(self, state, current_node):
+    def find_direction(self, state, current_node, policy):
         """
         Return the direction of the split based on the axis of the split point
 
-        state = [axis,point]
+        state = [axis, point]
         current_node = current node id
 
         return 0 if the state is on the left of the split point
         """
-        # split is described by the tuple [axis, value]
-        #split = self.nodes[current_node].val[1]
+        # # split is described by the tuple [axis, value]
+        # split = self.nodes[current_node].val[1]
+
         # if state[0] != split[0]:
         #     state_value = 0
         # else:
@@ -107,7 +108,6 @@ class BinaryTree:
         # else:
         #     # 1 is right
         #     return 1
-
         split = self.nodes[current_node].val[1]
         if policy: 
             # Check if state is a scalar
@@ -116,7 +116,6 @@ class BinaryTree:
             else:
                 state_value = state[split[0]]
 
-        # Check if state is a scalar
             if state_value < split[1]:
                 # 0 is left
                 return 0
@@ -134,13 +133,11 @@ class BinaryTree:
                     state = 0
                 else:
                     state = point
-
+            
             if point < split[1]:
                 return 0
             else:
                 return 1
-
-        
 
     def get_current_policy(self):
         res = []
@@ -215,7 +212,7 @@ class BinaryTree:
             vertex[i] = region[i][1]
 
         return vertex
-    
+
     def check_already_existing_split(self, value):
         for Node in self.nodes:
             if not self.is_leaf[Node.node_id] and Node.val is not None:

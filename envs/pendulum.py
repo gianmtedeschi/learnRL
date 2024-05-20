@@ -102,7 +102,7 @@ class PendulumEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, horizon=200, gamma=0, render_mode: Optional[str] = None, g=10.0):
+    def __init__(self, horizon=200, gamma=0.9, render_mode: Optional[str] = None, g=9.8):
         self.horizon = horizon
         self.gamma = gamma
         self.state_dim = 3
@@ -156,7 +156,7 @@ class PendulumEnv(gym.Env):
         if self.render_mode == "human":
             self.render()
 
-        return self.state.ravel(), -costs, done, False
+        return self.state, -costs, done, False
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -182,7 +182,7 @@ class PendulumEnv(gym.Env):
             self.render()
         
         self.h = 0
-        return self.state.ravel(), {}
+        return self.state, {}
 
     def _get_obs(self, coords=None):
         theta, thetadot = self.coord

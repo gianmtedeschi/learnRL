@@ -29,7 +29,7 @@ class TrajectorySampler:
         return
 
     def collect_trajectory(
-            self, params: np.array = None, starting_state=None
+            self, params: np.array = None, starting_state=None, split=False
     ) -> list:
         """
         Summary:
@@ -53,10 +53,16 @@ class TrajectorySampler:
         np.random.seed()
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
-        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+        if split:
+            scores = np.zeros((self.env.horizon, len(self.pol.history.get_all_leaves()), self.pol.tot_params), dtype=np.float64)
+        else:
+            scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+
         states = np.zeros((self.env.horizon, self.env.state_dim), dtype=np.float64)
         if params is not None:
-            self.pol.set_parameters(thetas=params)
+            self.pol.set_parameters(thetas=copy.deepcopy(params))
+
+        
 
         # act
         for t in range(self.env.horizon):

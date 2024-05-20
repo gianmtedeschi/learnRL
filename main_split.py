@@ -24,7 +24,7 @@ import json
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah"]
-ENV = "pendulum"
+ENV = "ant"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -33,7 +33,7 @@ alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angl
 ALG = alg_selection[6]
 
 # environment
-horizon = 200
+horizon = 10
 gamma = 0.99
 RENDER = False
 

@@ -87,9 +87,9 @@ class Continuous_MountainCarEnv(gym.Env):
 
         self.state = np.array([position, velocity], dtype=np.float32)
 
-        observation = np.array([2*(self.state[0]-self.min_position)/(self.max_position-self.min_position)-1, self.state[1]/self.max_speed]).ravel()
+        # observation = np.array([2*(self.state[0]-self.min_position)/(self.max_position-self.min_position)-1, self.state[1]/self.max_speed]).ravel()
 
-        return observation, reward, done, terminated
+        return self.state, reward, done, terminated
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
