@@ -108,6 +108,11 @@ elif ENV == "ant":
     env_class = Ant
     env = Ant(horizon=horizon, gamma=gamma)
     dir += f"ant_{horizon}_"
+elif ENV == "hopper":
+    env_class = Hopper
+    env = Hopper(horizon=horizon, gamma=gamma)
+    dir += f"hopper_{horizon}_"
+
 elif ENV == "half_cheetah":
     env_class = HalfCheetah
     env = HalfCheetah(horizon=horizon, gamma=gamma)
@@ -157,9 +162,7 @@ elif POL == "split_gaussian":
         dim_action=a_dim,
         std_dev=0.1,
         std_decay=0,
-        std_min=1e-6,
-        multi_linear=False,
-        constant=True
+        std_min=1e-6
     )
     sd=pol.std_dev
     dir += f"split_policy_{tot_params}_var_{sd}"
@@ -341,9 +344,10 @@ if ALG=="VM_multi_dim":
 if __name__ == "__main__":
     # Learn phase
     
-    print(text2art("== LQ =="))
+    print(text2art("== ADAPTIVE POLICIES =="))
+    print(text2art(ENV))
     if MODE in ["learn", "learn_test"]:
-        print(text2art("Learn Start"))
+        
         alg.learn()
         alg.save_results()
         print(alg.performance_idx)
