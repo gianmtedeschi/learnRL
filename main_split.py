@@ -25,13 +25,13 @@ import json
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah","hopper","minigolf","pusher","reacher"]
-ENV = "ant"
+ENV = "pusher"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angles_multi_dim","VM_multi_dim"]
-ALG = alg_selection[6]
+ALG = alg_selection[4]
 
 # environment
 horizon = 10
@@ -41,7 +41,7 @@ RENDER = False
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 1200
+ITE = 2000
 BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "adam"
@@ -128,6 +128,11 @@ elif ENV == "pusher":
     env_class = Pusher
     env = Pusher(horizon=horizon, gamma=gamma)
     dir += f"pusher_{horizon}_"
+
+elif ENV == "reacher":
+    env_class = Reacher
+    env = Reacher(horizon=horizon, gamma=gamma)
+    dir += f"reacher_{horizon}_"
 else:
     raise NotImplementedError
 
