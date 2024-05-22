@@ -25,7 +25,7 @@ import json
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah","hopper","minigolf","pusher","reacher"]
-ENV = "half_cheetah"
+ENV = "ant"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -41,7 +41,7 @@ RENDER = False
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 2000
+ITE = 1200
 BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "adam"

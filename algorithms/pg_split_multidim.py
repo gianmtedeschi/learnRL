@@ -379,7 +379,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
             
             key = tuple([axis, self.split_grid[i][axis]])  
             
-            if self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1], self.alpha):
+            if self.check_split_bernstein(reward_trajectory[0], reward_trajectory[1], self.alpha):
             # if(True):
                 splits[key] = [thetas, True, gradient_norm]
             else:

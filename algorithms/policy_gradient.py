@@ -147,7 +147,7 @@ class PolicyGradient:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
 
-            print(f"Estimated gradient: {estimated_gradient}")
+            print(f"Estimated gradient: {estimated_gradient},{estimated_gradient.shape}")
             # Update parameters
             if self.lr_strategy == "constant":
                 self.thetas = self.thetas + self.lr * estimated_gradient
