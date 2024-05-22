@@ -24,8 +24,8 @@ import json
 # general
 MODE = "learn_test"
 
-# env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah"]
-ENV = "ant"
+# env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah","hopper","minigolf","pusher","reacher"]
+ENV = "half_cheetah"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -41,10 +41,10 @@ RENDER = False
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 1000
+ITE = 2000
 BATCH = 100
 N_JOBS_PARAM = 8
-LR_STRATEGY = "constant"
+LR_STRATEGY = "adam"
 BASELINE = "peters"
 CHECKPOINT=50
 MULTI_LINEAR=True
@@ -123,6 +123,11 @@ elif ENV == "half_cheetah":
     env_class = HalfCheetah
     env = HalfCheetah(horizon=horizon, gamma=gamma)
     dir += f"half_cheetah_{horizon}_"
+
+elif ENV == "pusher":
+    env_class = Pusher
+    env = Pusher(horizon=horizon, gamma=gamma)
+    dir += f"pusher_{horizon}_"
 else:
     raise NotImplementedError
 
