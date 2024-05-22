@@ -40,5 +40,5 @@ Only for the LQR environment:
 
 Here is an example running PG on Swimmer:
 ```bash
-python3 run.py --dir /your/path --alg pg --ite 100 --var 1 --pol linear --env swimmer --horizon 100 --gamma 1 --lr 0.1 --lr_strategy adam --clip 1 --batch 30 --n_trials 1
+python3 run.py --dir /your/path --alg pg --ite 100 --std 1 --pol linear --env swimmer --horizon 100 --gamma 1 --lr 0.1 --lr_strategy adam --clip 1 --batch 30 --n_trials 1
 ```
