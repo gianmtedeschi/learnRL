@@ -1,11 +1,3 @@
-"""
-array nodi
-
-nodo --> id, id_l, id_r, val, id_father
-
-while loop --> if nodo.val[1] is None:
-"""
-
 import numpy as np
 import graphviz
 
@@ -94,20 +86,6 @@ class BinaryTree:
 
         return 0 if the state is on the left of the split point
         """
-        # # split is described by the tuple [axis, value]
-        # split = self.nodes[current_node].val[1]
-
-        # if state[0] != split[0]:
-        #     state_value = 0
-        # else:
-        #     state_value = state[1]
-
-        # if state_value < split[1]:
-        #     # 0 is left
-        #     return 0
-        # else:
-        #     # 1 is right
-        #     return 1
         split = self.nodes[current_node].val[1]
         if policy: 
             # Check if state is a scalar
@@ -241,24 +219,4 @@ class BinaryTree:
             return
         
         print(f'Node information:\n Node id: {node.node_id}\n Parameter: {node.val[0]}\n Split point: {node.val[1]}\n Is leaf: {self.is_leaf[node.node_id]}\n')
-    
-# Example usage:
-if __name__ == "__main__":
-    tree = BinaryTree()
-    tree.insert_root(0)
-    tree.insert([np.array(-1), np.array(1)], 0, [0, 0.5])
-
-
-    # print(tree.get_current_policy())
-    # tree.to_list(tree.nodes[1])
-
-    # region = tree.get_region(tree.nodes[4])
-    # print(region)
-
-    # region_leaf = tree.find_region_leaf([-1])
-    # tree.to_list(region_leaf)
-
-    policy = np.array(tree.get_current_policy())
-    print(policy)
-    # tree.to_png()
     

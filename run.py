@@ -6,6 +6,7 @@ from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
+import pickle 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -52,7 +53,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "hopper", "ant", "lq", "pendulum", "mountain_car", "minigolf", "pusher", "reacher"]
+    choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf"]
 )
 parser.add_argument(
     "--horizon",
@@ -129,6 +130,12 @@ parser.add_argument(
     type=float,
     default=1e-1,
 )
+parser.add_argument(
+    "--max_splits",
+    help="Maximum number of division.",
+    type=int,
+    default=10,
+)
 
 
 
@@ -167,31 +174,13 @@ for i in range(args.n_trials):
         env_class = Ant
         env = Ant(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
-    elif args.env == "hopper":
-        env_class = Hopper
-        env = Hopper(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
-        MULTI_LINEAR = True
     elif args.env == "lq":
         env_class = LQ
         env = LQ(horizon=args.horizon, gamma=args.gamma, action_dim=args.lq_action_dim, state_dim=args.lq_state_dim)
         MULTI_LINEAR = bool(args.lq_action_dim > 1)
-    elif args.env == "pendulum":
-        env_class = PendulumEnv
-        env = PendulumEnv(horizon=args.horizon, gamma=args.gamma)
-    elif args.env == "mountain_car":
-        env_class = Continuous_MountainCarEnv
-        env = Continuous_MountainCarEnv(horizon=args.horizon, gamma=args.gamma)
     elif args.env == "minigolf":
         env_class = MiniGolf
         env = MiniGolf(horizon=args.horizon, gamma=args.gamma)
-    elif args.env == "pusher":
-        env_class = Pusher
-        env = Pusher(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
-        MULTI_LINEAR = True
-    elif args.env == "reacher":
-        env_class = Reacher
-        env = Reacher(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
-        MULTI_LINEAR = True
     else:
         raise ValueError(f"Invalid env name.")
 
@@ -246,7 +235,7 @@ for i in range(args.n_trials):
             verbose=args.verbose,
             checkpoint_freq=50,
             n_jobs=1,
-            baselines=args.baseline,
+            baselines=args.baseline
         )
         alg = PolicyGradient(**alg_parameters)
     elif args.alg == "split":
@@ -266,7 +255,8 @@ for i in range(args.n_trials):
             n_jobs=1,
             baselines=args.baseline,
             split_grid=None,
-            alpha=args.alpha
+            alpha=args.alpha,
+            max_splits=args.max_splits
         )
         alg = PolicyGradientSplit(**alg_parameters)
     else:

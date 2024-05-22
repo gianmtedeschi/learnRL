@@ -1,0 +1,1 @@
+python3 /Users/gianmarcotedeschi/Projects/learnRL/run.py --dir /Users/gianmarcotedeschi/Projects/learnRL/results/ --ite 1000 --alg split --pol split_gaussian --env hopper --horizon 200 --gamma 0.995 --lr 1 --lr_strategy constant --batch 100 --clip 1 --n_trials 5

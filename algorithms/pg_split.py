@@ -1,52 +1,4 @@
-"""Adaptive Policy Gradient Implementation
-
-structure idea --> use this class solely for split logic
-                    learning part performed by policy_gradient.py
-                    this class should return a new costant gaussian policy
-
-new policy structure!!
-
-pol = GaussianPolicy(
-    parameters=thetas_split,
-    dim_state=self.env.ds,
-    dim_action=self.env.da,
-    std_dev=0.1,
-    std_decay=0,
-    std_min=1e-6,
-    multi_linear=False,
-    constant=True
-)
-
-todo --> specialize gaussian policy for the use case
-        split point should be part of the policy since are needed for draw_action
-        and compute_score (play using param in your region, computer score in your region)
-
-todo --> adjust the logic of the algorithm, check the sign of the current gradient and the
-        previous one, when they are opposite activate the split process, before that just normally
-        update the policy
-
-todo --> from split return also the split point associated to the possible division as to be able
-        to understand who is the father of the 2 params
-"""
-
-"""
-criterio convergenza: norma della media degli ultimi n gradienti è vicina a 0
-
-per scegliere regione guardo componente del gradiente con varianza più grande ---> varianza sulle traiettorie ---> prendo gradienti non mediati e faccio varianze colonne gradienti 
-
-sub sampling sui punti di split ?????
-
-se nessun punto e valido guardi seconda regione con varianza più grande
-
-nessun punto in nessuna regione ---> convergenza
-
-Crea struttura dati con varianza delle coordinate gradiente per mantenerti dove andare a cercare i punti 
-Crea una funzione find interval che ti restituisce gli estremi dell'intervallo di una regione --> guarda gli ultimi due padri
-
-
-self.thetas should be a list of arrays
-"""
-
+"""Adaptive Policy Gradient Implementation"""
 
 # imports
 import numpy as np
@@ -88,8 +40,7 @@ class PolicyGradientSplit(PolicyGradient):
             natural: bool = False,
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
-            split_grid: np.array = None,
-            max_splits: int = 1000,
+            max_splits: int = 100,
             baselines: str = None,
             alpha: float = 0.1
     ) -> None:
@@ -124,10 +75,6 @@ class PolicyGradientSplit(PolicyGradient):
         err_msg = "[PG_split] data processor is None."
         assert data_processor is not None, err_msg
         self.data_processor = data_processor
-
-        # err_msg = "[PG_split] split grid is None."
-        # assert split_grid is not None, err_msg
-        # self.split_grid = split_grid
 
         os.makedirs(directory, exist_ok=True)
         self.directory = directory
@@ -174,9 +121,6 @@ class PolicyGradientSplit(PolicyGradient):
         self.split_ite = []
         self.trial = 0
         self.alpha = alpha
-
-        # TESTING PURPOSES
-        self.split_grid = np.array([[0], [1], [-1],[2],[-2],[4],[-4],[8],[-8],[16],[-16]])
 
         return
 
@@ -291,7 +235,7 @@ class PolicyGradientSplit(PolicyGradient):
 
     def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
         traj = []
-        
+    
         closest_leaf = self.policy.history.find_region_leaf(split_state)
         lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, self.dim_state)
         upper_vertex = self.policy.history.get_upper_vertex(closest_leaf, self.dim_state)
@@ -313,9 +257,6 @@ class PolicyGradientSplit(PolicyGradient):
             if i == split_state[0]:
                 right_lower[i] = split_state[1]
                 
-        # print("Destra:", right_lower, right_upper)
-        # print("Sinistra:", left_lower, left_upper)
-
         traj_l, traj_r = 0, 0
         score_left = np.zeros((self.batch_size, self.env.horizon, self.env.action_dim), dtype=np.float64)
         score_right = np.zeros((self.batch_size, self.env.horizon, self.env.action_dim), dtype=np.float64)
@@ -336,9 +277,6 @@ class PolicyGradientSplit(PolicyGradient):
 
         reward_trajectory_left = np.sum(np.cumsum(score_left, axis=1) * reward_vector[...,None], axis=1)
         reward_trajectory_right = np.sum(np.cumsum(score_right, axis=1) * reward_vector[...,None], axis=1)
-
-        # print("Reward trajectory left: ", reward_trajectory_left)
-        # print("Reward trajectory right: ", reward_trajectory_right)
 
         estimated_gradient_left = np.mean(reward_trajectory_left, axis=0)
         estimated_gradient_right = np.mean(reward_trajectory_right, axis=0)
@@ -362,34 +300,21 @@ class PolicyGradientSplit(PolicyGradient):
         splits = {}
 
         for i in range(len(self.split_grid)):
-            # print("Iteration split:", i + 1)
-            # print("split state:", self.split_grid[i], i)
             res = self.split(score_vector, state_vector, reward_vector, np.array([axis, self.split_grid[i][axis]]))
-            # res = self.split(score_vector, state_vector, reward_vector, self.split_grid)
 
             reward_trajectory = res[SplitResults.RewardTrajectories]
             estimated_gradient = res[SplitResults.Gradient]
-            trajectories = res[SplitResults.ValidTrajectories]
             thetas = res[SplitResults.SplitThetas]
 
             gradient_norm = np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1])
-            # print("Point: ", self.split_grid[i])
-            # print("Gradient mean:", estimated_gradient[0], estimated_gradient[1])
-            # print("Thetas: ", thetas)
+
             
             key = tuple([axis, self.split_grid[i][axis]])  
             
             if self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1], self.alpha):
-            # if(True):
                 splits[key] = [thetas, True, gradient_norm]
             else:
                 splits[key] = [thetas, False, gradient_norm]
-
-            # print("norm left: ", np.linalg.norm(grad_tmp[0]))
-            # print("norm right: ", np.linalg.norm(grad_tmp[1]))
-            # print("sum norm: ", np.linalg.norm(grad_tmp[0])+np.linalg.norm(grad_tmp[1]))
-
-            # print(estimated_gradient[0], estimated_gradient[1])
         
         # remove duplicate splits
         valid_splits = {key: value for key, value in splits.items() if value[1] is True}
@@ -409,7 +334,6 @@ class PolicyGradientSplit(PolicyGradient):
             print("Split state: ", best_split_state)
 
             # update tree policy
-            # self.policy.history.insert(best_split_thetas, self.father_id, best_split_state.item())
             self.policy.history.insert(np.array(best_split_thetas), self.father_id, best_split_state)
 
             self.split_done = True
@@ -423,10 +347,6 @@ class PolicyGradientSplit(PolicyGradient):
             if self.lr_strategy == "adam":
                 index_of_split = list(splits.keys()).index(best_split_state)
                 self.adam_optimizer.update_params(local=False, coord=self.splitting_coordinate, index=index_of_split)
-                
-            # self.split_grid = np.delete(self.split_grid, np.argwhere(self.split_grid == best_split_state[1]), axis=0)
-            # index = np.argwhere(self.split_grid == best_split_state)
-            # self.split_grid = np.delete(self.split_grid, index)
         else:
             print("No split found!")
             self.split_done = False
@@ -464,17 +384,11 @@ class PolicyGradientSplit(PolicyGradient):
 
     def check_split_bernstein(self, left, right, delta=0.1):
         p = self.compute_p(left, right)
-        
         z = np.var(p)
         sup = np.max(p)
         
         test = np.sqrt((2 * z * np.log(2/delta))/self.batch_size) + (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup) + np.mean(p)
-        
-        # term1 = np.sqrt((2 * z * np.log(2/delta))/self.batch_size)
-        # term2 = (((7 * np.log(1/delta))/(3 * (self.batch_size- 1))) * sup)
-        # term3 = np.mean(p)
-        # print("************************", term1, term2, term3)
-
+    
         return (test < 0)
 
     def check_split_bernstein_ci(self, left, right, delta=0.1):
@@ -514,7 +428,7 @@ class PolicyGradientSplit(PolicyGradient):
     def uniformity_test(self, n, R):
         return (2 * n * R**2 > stats.chi2.ppf(0.995, 2))
 
-    def check_split_von_mises(self, left, right, alpha):
+    def check_split_von_mises(self, left, right, alpha=0.1):
         
         test = False
         angle = self.compute_angle(left, right)
@@ -622,7 +536,7 @@ class PolicyGradientSplit(PolicyGradient):
 
         print("Delta gradient mean: ", delta)
 
-        if np.isclose(delta, 0, atol=1):
+        if np.isclose(delta, 0, atol=0.5):
             # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0)
             best_region = np.argmax(np.sum(var, axis=1))

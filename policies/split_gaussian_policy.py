@@ -43,7 +43,8 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         self.std_decay = std_decay
         self.std_min = std_min
 
-        self.history = history
+        # self.history = history
+        self.history = BinaryTree()
         self.tot_params = dim_action
         return
 
@@ -66,12 +67,10 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         
         scores = np.zeros((len(self.history.get_all_leaves()), self.tot_params))
         
-        # scores = np.zeros(self.tot_params)
         leaf = self.history.find_region_leaf(state, policy=True)
 
         for position, Node in enumerate(self.history.get_all_leaves()):
             if np.all(leaf.val[0] == Node.val[0]):
-                #TODO np.ravel
                 scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
         
         return scores
