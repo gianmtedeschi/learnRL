@@ -156,7 +156,7 @@ class PendulumEnv(gym.Env):
         if self.render_mode == "human":
             self.render()
 
-        return self.state, -costs, done, False
+        return np.ravel(self.state), -costs, done, False
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)

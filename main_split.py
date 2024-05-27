@@ -25,7 +25,7 @@ import json
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah","hopper","minigolf","pusher","reacher"]
-ENV = "minigolf"
+ENV = "lq"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -41,7 +41,7 @@ RENDER = False
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 1200
+ITE = 100
 BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "adam"
@@ -92,7 +92,7 @@ num_test = 10
 """Environment"""
 if ENV == "lq":
     env_class = LQ
-    env = LQ(horizon=horizon, gamma=gamma,action_dim=2, state_dim=2)
+    env = LQ(horizon=horizon, gamma=gamma,action_dim=1, state_dim=3)
     dir += f"lq_{horizon}_{env.state_dim}dim_"
 elif ENV == "cartpole":
     env_class = ContCartPole

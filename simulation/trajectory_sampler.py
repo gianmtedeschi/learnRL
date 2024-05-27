@@ -85,7 +85,7 @@ class TrajectorySampler:
             # update the vectors of rewards scores and state
             rewards[t] = rew
             scores[t, :] = score
-            states[t, :] = np.ravel(state)
+            states[t, :] = state
 
             if done:
                 if t < self.env.horizon - 1:

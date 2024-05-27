@@ -287,6 +287,42 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
                 print("Max splits reached!")
                 self.split_done=False
         return
+    def compute_phi(self,state):
+        
+        num_leaves= len(self.policy.history.get_all_leaves())
+        split_states=[]
+        for i in range(num_leaves):
+                split_states[i]= self.policy.history.nodes[self.policy.history.get_all_leaves()[i].father_id].val[1][1]
+        split_states=np.unique(split_states)
+        
+        intervals = [(-np.inf, split_states[0])] + [(split_states[i], split_states[i+1]) for i in range(len(split_states)-1)] + [(split_states[-1], np.inf)]
+        result_vectors = []
+        for interval in intervals:
+              vector = np.zeros_like(state)
+              if interval[0] < state <= interval[1]:
+                     vector[i] = 1
+              result_vectors.append(vector)
+        return result_vectors
+
+
+
+    
+        
+
+
+
+           
+
+        
+        def phi(s):
+        zeros = torch.zeros_like(s)
+        ones = torch.ones_like(s)
+        a = torch.where(s<0.76, ones, zeros)
+        b = torch.where(torch.logical_and(s>=0.76, s<1), ones, zeros)
+        c = torch.where(s>=1, ones, zeros)
+        _phi = torch.stack((a,b,c), -1).squeeze()
+        #print(_phi.shape)
+        return _phi
 
     def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
         traj = []
