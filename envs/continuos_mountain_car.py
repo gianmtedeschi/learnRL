@@ -60,7 +60,7 @@ class Continuous_MountainCarEnv(gym.Env):
 
         position = self.state[0]
         velocity = self.state[1]
-        force = min(max(action, self.min_action), self.max_action)
+        force = np.ravel(min(max(action, self.min_action), self.max_action))
 
         velocity += force * self.power - 0.0025 * math.cos(3 * position)
         if velocity > self.max_speed:
@@ -89,7 +89,7 @@ class Continuous_MountainCarEnv(gym.Env):
 
         # observation = np.array([2*(self.state[0]-self.min_position)/(self.max_position-self.min_position)-1, self.state[1]/self.max_speed]).ravel()
 
-        return self.state, reward, done, terminated
+        return np.ravel(self.state), reward, done, terminated
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)

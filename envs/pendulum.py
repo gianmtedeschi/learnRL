@@ -144,19 +144,19 @@ class PendulumEnv(gym.Env):
 
         action = np.clip(action, -self.max_torque, self.max_torque)
         self.last_u = action  # for rendering
-        costs = angle_normalize(th) ** 2 + 0.1 * thdot**2 + 0.001 * (action**2)
+        costs = np.ravel(angle_normalize(th) ** 2 + 0.1 * thdot**2 + 0.001 * (action**2))
 
         newthdot = thdot + (3 * g / (2 * l) * np.sin(th) + 3.0 / (m * l**2) * action) * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
         newth = th + newthdot * dt
 
         self.coord = np.array([newth, newthdot])
-        self.state = self._get_obs()
+        self.state = np.ravel(self._get_obs())
 
         if self.render_mode == "human":
             self.render()
 
-        return np.ravel(self.state), -costs, done, False
+        return self.state, -costs, done, False
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)

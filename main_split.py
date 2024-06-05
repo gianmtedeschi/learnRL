@@ -19,29 +19,30 @@ import torch
 import datetime
 import torch.nn as nn
 import json
+import pickle
 
 """Global Vars"""
 # general
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah","hopper","minigolf","pusher","reacher"]
-ENV = "lq"
+ENV = "pendulum"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
-POL = "split_gaussian"
+POL = "gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angles_multi_dim","VM_multi_dim"]
-ALG = alg_selection[6]
+ALG = alg_selection[0]
 
 # environment
-horizon = 10
+horizon = 50
 gamma = 0.9
 RENDER = False
 
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 100
+ITE = 1000
 BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "adam"
@@ -79,7 +80,7 @@ if ALG=="VM_multi_dim":
 
 
 if LR_STRATEGY == "adam":
-    INIT_LR = 1e-2
+    INIT_LR = 1e-3
     dir += "adam_001_"
 else:
     INIT_LR = 1e-5
@@ -92,7 +93,7 @@ num_test = 10
 """Environment"""
 if ENV == "lq":
     env_class = LQ
-    env = LQ(horizon=horizon, gamma=gamma,action_dim=1, state_dim=3)
+    env = LQ(horizon=horizon, gamma=gamma,action_dim=1, state_dim=1)
     dir += f"lq_{horizon}_{env.state_dim}dim_"
 elif ENV == "cartpole":
     env_class = ContCartPole
@@ -373,7 +374,35 @@ if __name__ == "__main__":
         alg.learn()
         alg.save_results()
         print(alg.performance_idx)
-
+    
+    """ if alg.num_of_splits>0:
+        print(text2art("== RERUNNING WITHOUT SPLITTING =="))
+        for i in range(1,alg.num_of_splits+1):
+            with open(f"before_split_policy_{i}_.pkl", "rb") as g:
+                deserialized_policy = pickle.load(g)
+            
+            new_parameters= dict(
+           lr=[INIT_LR],
+           lr_strategy=LR_STRATEGY,
+           estimator_type=ESTIMATOR,
+           initial_theta=deserialized_policy.history.get_current_policy(),
+           ite=ITE,
+           batch_size=BATCH,
+           env=env,
+           policy=deserialized_policy,
+           data_processor=dp,
+           directory=dir+"TOKEN_{i}",
+           verbose=DEBUG,
+           natural=NATURAL,
+           checkpoint_freq=CHECKPOINT,
+           n_jobs=N_JOBS_PARAM,
+           baselines=BASELINE,
+           split_grid=None
+           )
+            run= PolicyGradientSplitMultiDimVM(**new_parameters)
+            run.max_splits=0
+            run.learn()
+ """
     # Test phase
     # todo aggiusta il fatto dello 0 e vedi di mettere il std decay
     # todo to clip or not to clip
