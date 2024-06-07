@@ -686,7 +686,7 @@ class PolicyGradientSplitMultiDimVM(PolicyGradient):
 
         print("Delta gradient mean: ", delta)
 
-        if np.isclose(delta, 0, atol=1): #if ||current_mean_gradient - previous_mean_gradient|| close to 0
+        if np.isclose(delta, 0, atol=0.4): #if ||current_mean_gradient - previous_mean_gradient|| close to 0
             # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0) #compute variance of the gradients of all trajectories for each region
             best_region = np.argmax(np.sum(var, axis=1)) #save the region in which the variance is max

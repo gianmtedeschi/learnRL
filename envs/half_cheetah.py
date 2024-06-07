@@ -58,4 +58,4 @@ class HalfCheetah(MujocoBase):
             )
         else:
             clipped_action = action
-        return super().step(action=clipped_action)
+        return super().step(action=np.ravel(clipped_action))

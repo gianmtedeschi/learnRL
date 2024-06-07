@@ -26,16 +26,16 @@ import pickle
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah","hopper","minigolf","pusher","reacher"]
-ENV = "pendulum"
+ENV = "half_cheetah"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
-POL = "gaussian"
+POL = "split_gaussian"
 
 alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angles_multi_dim","VM_multi_dim"]
-ALG = alg_selection[0]
+ALG = alg_selection[6]
 
 # environment
-horizon = 50
+horizon = 200
 gamma = 0.9
 RENDER = False
 
@@ -80,7 +80,7 @@ if ALG=="VM_multi_dim":
 
 
 if LR_STRATEGY == "adam":
-    INIT_LR = 1e-3
+    INIT_LR = 1e-1
     dir += "adam_001_"
 else:
     INIT_LR = 1e-5
@@ -93,7 +93,7 @@ num_test = 10
 """Environment"""
 if ENV == "lq":
     env_class = LQ
-    env = LQ(horizon=horizon, gamma=gamma,action_dim=1, state_dim=1)
+    env = LQ(horizon=horizon, gamma=gamma,action_dim=2, state_dim=2)
     dir += f"lq_{horizon}_{env.state_dim}dim_"
 elif ENV == "cartpole":
     env_class = ContCartPole

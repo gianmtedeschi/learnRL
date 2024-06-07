@@ -11,6 +11,7 @@ import scipy.stats as stats
 import math
 import astropy.stats.circstats as circ
 import pickle
+import gym
 
 import json
 import io
@@ -21,15 +22,9 @@ from adam.adam import Adam
 import os
 import time
 
-low = np.array(
-            [0, 5], dtype=np.float32
-        )
-high = np.array(
-            [-1, 1], dtype=np.float32
-        )
 
 
-v=np.array(np.random.uniform(low=low, high=high))
-v= np.array(v)
-v1= np.array(v[0])
-print(v1.shape)
+<option collision="predefined" density="4000" integrator="RK4" timestep="0.01" viscosity="0.1"/>
+        
+
+

@@ -24,7 +24,7 @@ class MiniGolf(BaseEnv):
 
     def __init__(self, horizon, gamma):
         self.action_dim = 1
-        self.state_dim = 3
+        self.state_dim = 1
         self.horizon = horizon
         self.gamma = gamma
     
