@@ -1,0 +1,7 @@
+{
+  "learning_rate": {
+    "type": "loguniform",
+    "lower": 1e-6,
+    "upper": 1
+  }
+}

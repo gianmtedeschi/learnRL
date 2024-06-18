@@ -1,0 +1,175 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Script 1",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 2",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 3",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 4",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 5",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 6",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 7",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 8",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 9",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Script 10",
+            "type": "shell",
+            "command": "python",
+            "args": ["/Users/Admin/OneDrive/Documenti/GitHub/learnRL/runner.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

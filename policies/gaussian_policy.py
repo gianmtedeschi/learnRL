@@ -63,14 +63,14 @@ class GaussianPolicy(BasePolicy, ABC):
             mean = np.array(self.parameters @ state, dtype=np.float64)
 
         action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
-        return action
+        return np.ravel(action)
 
     def reduce_exploration(self):
         self.std_dev = np.clip(self.std_dev - self.std_decay, self.std_min, np.inf)
 
     def set_parameters(self, thetas) -> None:
         if not self.multi_linear:
-            self.parameters = copy.deepcopy(thetas)
+           self.parameters = copy.deepcopy(thetas)
         else:
             self.parameters = np.array(np.split(thetas, self.dim_action))
 

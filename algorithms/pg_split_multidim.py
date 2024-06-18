@@ -569,7 +569,7 @@ class PolicyGradientSplitMultiDim(PolicyGradient):
 
         print("Delta gradient mean: ", delta)
 
-        if np.isclose(delta, 0, atol=1):
+        if np.isclose(delta, 0, atol=0.4):
             # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0)
             best_region = np.argmax(np.sum(var, axis=1))

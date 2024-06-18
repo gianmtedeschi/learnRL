@@ -26,7 +26,7 @@ import pickle
 MODE = "learn_test"
 
 # env_selection = ["lq", "swimmer", "cartpole","mountain_car","pendulum","ant","half_cheetah","hopper","minigolf","pusher","reacher"]
-ENV = "half_cheetah"
+ENV = "lq"
 
 # pol_selection = ["split_gaussian", "linear", "gaussian", "nn"]
 POL = "split_gaussian"
@@ -35,8 +35,8 @@ alg_selection = ["pg", "split","split_angles","split_VM","split_multi_dim","angl
 ALG = alg_selection[6]
 
 # environment
-horizon = 200
-gamma = 0.9
+horizon = 10
+gamma = 0.999
 RENDER = False
 
 # algorithm
@@ -93,7 +93,7 @@ num_test = 10
 """Environment"""
 if ENV == "lq":
     env_class = LQ
-    env = LQ(horizon=horizon, gamma=gamma,action_dim=2, state_dim=2)
+    env = LQ(horizon=horizon, gamma=gamma,action_dim=1, state_dim=1)
     dir += f"lq_{horizon}_{env.state_dim}dim_"
 elif ENV == "cartpole":
     env_class = ContCartPole
@@ -375,23 +375,23 @@ if __name__ == "__main__":
         alg.save_results()
         print(alg.performance_idx)
     
-    """ if alg.num_of_splits>0:
+    """  if alg.num_of_splits>0:
         print(text2art("== RERUNNING WITHOUT SPLITTING =="))
         for i in range(1,alg.num_of_splits+1):
-            with open(f"before_split_policy_{i}_.pkl", "rb") as g:
+            with open(f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/before_split_policy_{i}_.pkl", "rb") as g:
                 deserialized_policy = pickle.load(g)
             
             new_parameters= dict(
            lr=[INIT_LR],
            lr_strategy=LR_STRATEGY,
            estimator_type=ESTIMATOR,
-           initial_theta=deserialized_policy.history.get_current_policy(),
+           initial_theta=[0]*tot_params,
            ite=ITE,
            batch_size=BATCH,
            env=env,
-           policy=deserialized_policy,
+           policy=pol,
            data_processor=dp,
-           directory=dir+"TOKEN_{i}",
+           directory=dir+"TOKEN_{i}_",
            verbose=DEBUG,
            natural=NATURAL,
            checkpoint_freq=CHECKPOINT,
@@ -400,6 +400,8 @@ if __name__ == "__main__":
            split_grid=None
            )
             run= PolicyGradientSplitMultiDimVM(**new_parameters)
+            run.thetas= np.array(deserialized_policy.history.get_current_policy())
+
             run.max_splits=0
             run.learn()
  """

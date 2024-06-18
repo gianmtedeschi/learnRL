@@ -1,0 +1,13 @@
+---
+experimentName: hpo_rl
+trialConcurrency: 2
+maxTrialNumber: 10
+trainingService:
+  platform: local
+searchSpaceFile: search_space.json
+tuner:
+  name: TPE
+  classArgs:
+    optimize_mode: maximize
+trialCommand: python main_nni.py
+trialCodeDirectory: .

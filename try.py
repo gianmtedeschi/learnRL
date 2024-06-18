@@ -24,7 +24,13 @@ import time
 
 
 
-<option collision="predefined" density="4000" integrator="RK4" timestep="0.01" viscosity="0.1"/>
+with open(f"/Users/Admin/OneDrive/Documenti/GitHub/learnRL/before_split_policy_1_.pkl", "rb") as g:
+                deserialized_policy = pickle.load(g)
+
+leaves= deserialized_policy.history.get_all_leaves()
+print(leaves[0].val[0])
+
+#print(deserialized_policy.history.get_current_policy())
         
 
 
