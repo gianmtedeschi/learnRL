@@ -1,7 +1,7 @@
 # Libraries
 import argparse
 import datetime
-from algorithms import PolicyGradientSplit, PolicyGradient
+from algorithms import PolicyGradientSplit, PolicyGradient, ParameterPolicyGradientSplit
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
@@ -26,7 +26,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pg",
-    choices=["pg", "split"]
+    choices=["pg", "agaps", "pgaps"]
 )
 parser.add_argument(
     "--estimator",
@@ -53,7 +53,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf"]
+    choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car"]
 )
 parser.add_argument(
     "--horizon",
@@ -136,6 +136,20 @@ parser.add_argument(
     type=int,
     default=10,
 )
+parser.add_argument(
+    "--deterministic",
+    help="Deterministic piecewise policy.",
+    type=bool,
+    default=False,
+)
+
+parser.add_argument(
+    "--linear",
+    help="Linear piecewise policy.",
+    type=bool,
+    default=False,
+)
+
 
 
 
@@ -181,6 +195,10 @@ for i in range(args.n_trials):
     elif args.env == "minigolf":
         env_class = MiniGolf
         env = MiniGolf(horizon=args.horizon, gamma=args.gamma)
+    elif args.env == "mountain_car":
+        env_class = Continuous_MountainCarEnv
+        env = Continuous_MountainCarEnv(horizon=args.horizon, gamma=args.gamma)
+        MULTI_LINEAR = True
     else:
         raise ValueError(f"Invalid env name.")
 
@@ -211,12 +229,16 @@ for i in range(args.n_trials):
             std_dev=args.std,
             std_decay=0,
             std_min=1e-6,
+            deterministic=args.deterministic,
+            linear=args.linear
         )
     else:
         raise NotImplementedError
     
     dir_name += f"{tot_params}_std_{string_var}"
     dir_name += f"_alpha_{str(args.alpha).replace('.', '')}"
+    if args.linear:
+        dir_name += f"_linear"
     dir_name = base_dir + dir_name + "/" + f"trial_{i}"
 
     """Algorithms"""
@@ -238,7 +260,7 @@ for i in range(args.n_trials):
             baselines=args.baseline
         )
         alg = PolicyGradient(**alg_parameters)
-    elif args.alg == "split":
+    elif args.alg == "agaps":
         alg_parameters = dict(
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
@@ -254,11 +276,30 @@ for i in range(args.n_trials):
             checkpoint_freq=50,
             n_jobs=1,
             baselines=args.baseline,
-            split_grid=None,
             alpha=args.alpha,
             max_splits=args.max_splits
         )
         alg = PolicyGradientSplit(**alg_parameters)
+    elif args.alg == "pgaps":
+        alg_parameters = dict(
+            lr=[args.lr],
+            lr_strategy=args.lr_strategy,
+            estimator_type=args.estimator,
+            initial_rho=[0] * tot_params,
+            ite=args.ite,
+            batch_size=args.batch,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=args.verbose,
+            checkpoint_freq=50,
+            n_jobs=1,
+            baselines=args.baseline,
+            alpha=args.alpha,
+            max_splits=args.max_splits
+        )
+        alg = ParameterPolicyGradientSplit(**alg_parameters)
     else:
         raise ValueError("Invalid algorithm name.")
     

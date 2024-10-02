@@ -86,7 +86,6 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
 
 
     def compute_score(self, state, action) -> np.array:
-        # todo
         return np.zeros(self.tot_params)
     
 

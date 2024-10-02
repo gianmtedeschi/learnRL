@@ -48,7 +48,7 @@ class GaussianPolicy(BasePolicy, ABC):
 
         return
 
-    def draw_action(self, state, test=True) -> float:
+    def draw_action(self, state) -> float:
         if state.size != self.dim_state:
             err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
             err_msg += f"\n{len(state)} vs. {self.dim_state} {state}"
@@ -63,6 +63,8 @@ class GaussianPolicy(BasePolicy, ABC):
             mean = np.array(self.parameters @ state, dtype=np.float64)
 
         action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
+        print(self.parameters.shape, self.parameters, len(state))
+
         return action
 
     def reduce_exploration(self):
@@ -84,7 +86,7 @@ class GaussianPolicy(BasePolicy, ABC):
             scores = (action - self.parameters) / (self.std_dev ** 2)
             return scores
         
-        action_deviation = action - (self.parameters @ self.phi(state))
+        action_deviation = action - (self.parameters @ state)
         
         if self.multi_linear:
             action_deviation = action_deviation[:, np.newaxis]

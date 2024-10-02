@@ -22,6 +22,8 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
             std_min: float = 1e-4,
             dim_state: int = 1,
             dim_action: int = 1,
+            deterministic: bool = False,
+            linear: bool = False,
             history: BinaryTree = BinaryTree()
 
     ) -> None:
@@ -46,6 +48,9 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         # self.history = history
         self.history = BinaryTree()
         self.tot_params = dim_action
+        self.deterministic = deterministic
+        self.linear = linear
+
         return
 
     def draw_action(self, state) -> float:
@@ -55,10 +60,20 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
 
         mean = self.history.find_region_leaf(state, policy=True)
         if mean is None:
-            action = np.random.normal(self.history.root.val[0], np.identity(1) * self.std_dev)
+            mean = self.history.root.val[0]
+            action = np.random.normal(mean, np.identity(1) * self.std_dev)
         else:
-            action = np.random.normal(mean.val[0], np.identity(1) * self.std_dev)
+            mean = mean.val[0]
+            action = np.random.normal(mean, np.identity(1) * self.std_dev)
 
+        # valid for pgaps
+        if self.deterministic:
+            action = np.random.normal(mean, np.identity(1) * self.std_dev)
+        
+        if self.linear:
+            action = np.random.normal(mean, np.identity(1) * self.std_dev) @ state
+
+         
         return action.ravel()
 
     def compute_score(self, state, action) -> np.array:
@@ -71,7 +86,11 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
 
         for position, Node in enumerate(self.history.get_all_leaves()):
             if np.all(leaf.val[0] == Node.val[0]):
-                scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
+                if self.linear:
+                    action = action - (leaf.val[0] @ state)
+                    scores[position] = (action * state) / (self.std_dev ** 2)
+                else:
+                    scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
         
         return scores
     

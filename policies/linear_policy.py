@@ -41,7 +41,7 @@ class LinearPolicy(BasePolicy, ABC):
             raise ValueError(err_msg)
         
         action = self.parameters @ np.array(state, ndmin=1)
-
+        
         return action
 
     def reduce_exploration(self):
