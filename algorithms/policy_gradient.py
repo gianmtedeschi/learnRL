@@ -107,7 +107,7 @@ class PolicyGradient:
         # create the adam optimizers
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
-            self.adam_optimizer = Adam()
+            self.adam_optimizer = Adam(alpha=self.lr)
         return
 
     def learn(self) -> None:

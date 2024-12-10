@@ -5,6 +5,7 @@ from envs import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor
 import numpy as np
+import math
 import copy
 from common.utils import *
 
@@ -94,6 +95,75 @@ class TrajectorySampler:
 
         return [perf, rewards, scores, states]
 
+    def collect_trajectory_mixed_planning(
+            self, params: np.array = None, starting_state=None, planning_horizon=1
+    ) -> list:
+        """
+        Summary:
+            Function collecting a trajectory reward for a particular theta
+            configuration.
+        Args:
+            params (np.array): the current sampling of theta values
+            starting_state (any): teh starting state for the iterations
+        Returns:
+            list of:
+                float: the discounted reward of the trajectory
+                np.array: vector of all the rewards
+                np.array: vector of all the scores
+        """
+        # reset the environment
+        self.env.reset()
+        if starting_state is not None:
+            self.env.state = copy.deepcopy(starting_state)
+
+        # initialize parameters
+        np.random.seed()
+        perf = 0
+        rewards = np.zeros(self.env.horizon, dtype=np.float64)
+        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+
+        if params is not None:
+            self.pol.set_parameters(thetas=copy.deepcopy(params))
+
+        # act
+        for t in range(math.ceil(self.env.horizon/planning_horizon)):
+            # retrieve the state
+            state = self.env.state
+
+            # transform the state
+            features = self.dp.transform(state=state)
+            
+            # sample the sequence of actions
+            action = self.pol.draw_action(state=features)
+                        
+            # compute the score
+            score = self.pol.compute_score(state=features, action=action)
+
+            # reshape the action according to the planning horizon
+            action = np.array(np.split(action, planning_horizon))
+
+            seq_reward = .0
+            for a in action:
+                # play the action
+                state, rew, done, _ = self.env.step(action=a)
+                seq_reward += rew
+                if done:
+                    break
+
+            # update the performance index
+            perf += (self.env.gamma ** t) * seq_reward
+
+            # update the vectors of rewards scores and state
+            rewards[t] = seq_reward
+            scores[t, :] = score
+
+            if done:
+                if t < self.env.horizon - 1:
+                    rewards[t+1:] = 0
+                    scores[t+1:] = 0
+                break
+
+        return [perf, rewards, scores]
 
 class ParameterSampler:
     """Sampler for PGPE."""

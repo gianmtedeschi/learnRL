@@ -63,7 +63,6 @@ class GaussianPolicy(BasePolicy, ABC):
             mean = np.array(self.parameters @ state, dtype=np.float64)
 
         action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
-        print(self.parameters.shape, self.parameters, len(state))
 
         return action
 

@@ -113,7 +113,7 @@ class ParameterPolicyGradientSplit(PolicyGradient):
         # create the adam optimizers
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
-            self.adam_optimizer = Adam()
+            self.adam_optimizer = Adam(alpha=self.lr)
 
         self.policy.history.insert_root(self.rho)
     
