@@ -14,7 +14,7 @@ class Hopper(MujocoBase):
     """Hopper Wrapper for the environment by GYM."""
     def __init__(
             self, horizon: int = 0, gamma: float = 0.99, verbose: bool = False,
-            render: bool = False,
+            render_mode=None,
             clip: bool = True
     ) -> None:
         super().__init__(
@@ -23,12 +23,9 @@ class Hopper(MujocoBase):
             verbose=verbose,
             clip=clip
         )
-        self.render = render
-        render_mode = None
-        if self.render:
-            render_mode = "human"
 
-        self.gym_env = gym.make('Hopper-v4', render_mode=render_mode)
+
+        self.gym_env = gym.make('Hopper-v5', render_mode=render_mode)
         self.action_bounds = [-1, 1]
         self.state_dim = self.gym_env.observation_space.shape[0]    # 11
         self.action_dim = self.gym_env.action_space.shape[0]        # 3

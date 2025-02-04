@@ -51,66 +51,74 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
         self.param_idx = np.cumsum(self.params_per_layer)
         self.tot_params = np.sum(self.params_per_layer)
 
-        if self.parameters is None:
-            # initialize the weights to one
-            # self.parameters = np.ones(np.sum(self.params_per_layer))
-            self.parameters = np.array(np.random.normal(0, 1, np.sum(self.params_per_layer)), dtype=np.float64)
+        self.parameters = self.get_parameters()
         self.set_parameters(self.parameters)
 
         
     def draw_action(self, state):
+        # if state.ndim == 2:
+        #     state = state.ravel()
+
         tensor_state = torch.tensor(np.array(state, dtype=np.float64)).unsqueeze(0)
+
         action = np.array(torch.detach(self.net(tensor_state)))
         return action
 
     def reduce_exploration(self):
         raise NotImplementedError("[NNPolicy] Ops, not implemented yet!")
     
-    def set_parameters(self, thetas) -> None:
-        # Converte i parametri in un tensore PyTorch
-        thetas = torch.tensor(thetas, dtype=torch.float64)
-        
-        # Calcola il numero totale di parametri nella rete
-        total_params = sum(param.numel() for param in self.net.parameters())
-        
-        # Verifica che il numero di parametri corrisponda
-        assert len(thetas) == total_params, (
-            f"Numero di parametri forniti ({len(thetas)}) non corrisponde a quelli della rete ({total_params})."
-        )
-        
-        # Indice per tracciare i parametri assegnati
-        start_idx = 0
-        
-        # Assegna i parametri a ogni livello
-        for param in self.net.parameters():
-            # Ottieni la forma del parametro corrente
-            param_shape = param.shape
-            num_params = param.numel()
-            
-            # Estrai i valori corrispondenti dai parametri forniti
-            param_values = thetas[start_idx:start_idx + num_params]
-            start_idx += num_params
-            
-            # Reshape e assegna i valori al parametro
-            param.data = param_values.view(param_shape)
-
+    def get_parameters(self):
+        theta = []
+        for i, param_layer in enumerate(self.net.parameters()):
+            theta += list(param_layer.data.numpy().flatten())
+        return np.array(theta)
+    
     # def set_parameters(self, thetas) -> None:
-    #     # check on the number of parameters
-    #     err_msg = f"[NNPolicy] Number of parameters {len(thetas)} is different from "
-    #     err_msg += f"{self.tot_params}"
-    #     assert len(thetas) == np.sum(self.params_per_layer), err_msg
+    #     # Converte i parametri in un tensore PyTorch
+    #     thetas = torch.tensor(thetas, dtype=torch.float64)
+        
+    #     # Calcola il numero totale di parametri nella rete
+    #     total_params = sum(param.numel() for param in self.net.parameters())
+        
+    #     # Verifica che il numero di parametri corrisponda
+    #     assert len(thetas) == total_params, (
+    #         f"Numero di parametri forniti ({len(thetas)}) non corrisponde a quelli della rete ({total_params})."
+    #     )
+        
+    #     # Indice per tracciare i parametri assegnati
+    #     start_idx = 0
+        
+    #     # Assegna i parametri a ogni livello
+    #     for param in self.net.parameters():
+    #         # Ottieni la forma del parametro corrente
+    #         param_shape = param.shape
+    #         num_params = param.numel()
+            
+    #         # Estrai i valori corrispondenti dai parametri forniti
+    #         param_values = thetas[start_idx:start_idx + num_params]
+    #         start_idx += num_params
+            
+    #         # Reshape e assegna i valori al parametro
+    #         param.data = param_values.view(param_shape)
 
-    #     # set the weights
-    #     tensor_param = torch.tensor(np.array(thetas, dtype=np.float64))
-    #     for i, param_layer in enumerate(self.net.parameters()):
-    #         if i == 0:
-    #             batch_params = tensor_param[: self.param_idx[i]]
-    #         elif i == len(self.layers_shape) - 1:
-    #             batch_params = tensor_param[self.param_idx[i - 1]:]
-    #         else:
-    #             batch_params = tensor_param[self.param_idx[i - 1]:self.param_idx[i]]
-    #         reshaped_params = torch.reshape(batch_params, self.net_layer_shape[i])
-    #         param_layer.data = nn.parameter.Parameter(reshaped_params, requires_grad=True)
+    def set_parameters(self, thetas) -> None:
+        # check on the number of parameters
+        err_msg = f"[NNPolicy] Number of parameters {len(thetas)} is different from "
+        err_msg += f"{self.tot_params}"
+        assert len(thetas) == np.sum(self.params_per_layer), err_msg
+
+        # set the weights
+        tensor_param = torch.tensor(np.array(thetas, dtype=np.float64))
+        for i, param_layer in enumerate(self.net.parameters()):
+            if i == 0:
+                batch_params = tensor_param[: self.param_idx[i]]
+            elif i == len(self.layers_shape) - 1:
+                batch_params = tensor_param[self.param_idx[i - 1]:]
+            else:
+                batch_params = tensor_param[self.param_idx[i - 1]:self.param_idx[i]]
+            reshaped_params = torch.reshape(batch_params, self.net_layer_shape[i])
+            param_layer.data = nn.parameter.Parameter(reshaped_params, requires_grad=True)
+
 
 
     def compute_score(self, state, action) -> np.array:
@@ -141,6 +149,8 @@ class DeepGaussianPolicy(NeuralNetworkPolicy):
         self.std_min = std_min
 
     def compute_score(self, state, action) -> np.array:
+        # if state.ndim == 2:
+        #     state = state.ravel()
         # Convert state and action to tensors
         state_tensor = torch.tensor(np.array(state, dtype=np.float64)).unsqueeze(0)
         action_tensor = torch.tensor(np.array(action, dtype=np.float64)).unsqueeze(0)
@@ -178,8 +188,6 @@ class DeepGaussianPolicy(NeuralNetworkPolicy):
                 grads[self.param_idx[i - 1]:self.param_idx[i]] = layer_grads
 
         return grads
-
-
 
     def reduce_exploration(self):
         self.std_dev = np.clip(

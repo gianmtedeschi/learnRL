@@ -1,8 +1,8 @@
-"""Half Cheetah Environment Implementation
+"""Pusher Environment Implementation
 Action Space
-    Box(-1, 1, (6,), float32)
+    Box(-1, 1, (7,), float32)
 Observation Space
-    Box(-inf, inf, (17,), float64)
+    Box(-inf, inf, (23,), float64)
 """
 # Libraries
 import gymnasium as gym
@@ -14,7 +14,7 @@ class Pusher(MujocoBase):
     """Half Cheetah Wrapper for the environment by GYM."""
     def __init__(
             self, horizon: int = 0, gamma: float = 0.99, verbose: bool = False,
-            render: bool = False,
+            render_mode=None,
             clip: bool = True
     ) -> None:
         super().__init__(
@@ -23,18 +23,13 @@ class Pusher(MujocoBase):
             verbose=verbose,
             clip=clip
         )
-        self.render = render
-        render_mode = None
-        if self.render:
-            render_mode = "human"
-
         self.gym_env = gym.make(
             'Pusher-v4',
             render_mode=render_mode
         )
-        self.action_bounds = [-2, 2]
-        self.state_dim = self.gym_env.observation_space.shape[0]    # 17
-        self.action_dim = self.gym_env.action_space.shape[0]        # 6
+        self.action_bounds = [-1, 1]
+        self.state_dim = self.gym_env.observation_space.shape[0]    # 23
+        self.action_dim = self.gym_env.action_space.shape[0]        # 7
         self.state = None
         self.action_space = self.gym_env.action_space
         self.observation_space = self.gym_env.observation_space

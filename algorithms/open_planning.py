@@ -4,18 +4,17 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-
-# todo
-from common.utils import TrajectoryResults
-from simulation.trajectory_sampler import TrajectorySampler
-
 import json
 import io
 from tqdm import tqdm
 import copy
 from adam.adam import Adam
-
 import os
+from common.utils import TrajectoryResults
+from simulation.trajectory_sampler import TrajectorySampler, planning_sampling_worker
+
+# todo
+from joblib import Parallel, delayed
 
 
 # Class Implementation
@@ -33,10 +32,13 @@ class CLOLPlanning:
             data_processor: BaseProcessor = IdentityDataProcessor(),
             directory: str = "",
             verbose: bool = False,
-            natural: bool = False,
             baselines: str = None,
             checkpoint_freq: int = 1,
-            planning_horizon: int = 1
+            planning_horizon: int = 1,
+            debug: bool = False,
+            n_jobs: int = 1,
+            persistence: bool = False,
+            seed: int = 0
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG] lr must be positive!"
@@ -75,9 +77,16 @@ class CLOLPlanning:
         self.ite = ite
         self.batch_size = batch_size
         self.verbose = verbose
-        self.natural = natural
-        self.baselines = baselines
+        self.debug = debug
         self.checkpoint_freq = checkpoint_freq
+        self.persistence = persistence
+        
+        # Parallel stuff
+        self.n_jobs = n_jobs
+        self.parallel_sampling = bool(self.n_jobs != 1)
+
+        # Algorithm parameters
+        self.baselines = baselines
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
         self.planning_horizon = planning_horizon
@@ -91,24 +100,49 @@ class CLOLPlanning:
         self.sampler = TrajectorySampler(
             env=self.env, pol=self.policy, data_processor=self.data_processor
         )
-        self.deterministic_curve = np.zeros(self.ite)
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+
+        # seed for reproducibility
+        self.seed = seed
 
         # create the adam optimizers
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(alpha=self.lr)
+
         return
 
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            res = []
-            for j in range(self.batch_size):
-                tmp_res = self.sampler.collect_trajectory_mixed_planning(params=copy.deepcopy(self.thetas), planning_horizon=self.planning_horizon)
-                res.append(tmp_res)
+            if self.parallel_sampling:
+                # parallel trajectory sampling
+                # prepare the parameters
+                self.policy.set_parameters(copy.deepcopy(self.thetas))
+                worker_dict = dict(
+                    env=copy.deepcopy(self.env),
+                    pol=copy.deepcopy(self.policy),
+                    dp=copy.deepcopy(self.data_processor),
+                    params=copy.deepcopy(self.thetas),
+                    planning_horizon=self.planning_horizon,
+                    persistence=self.persistence,
+                    # seed=self.seed
+                )
+
+                # build the parallel functions
+                delayed_functions = delayed(planning_sampling_worker)
+
+                # parallel computation
+                res = Parallel(n_jobs=self.n_jobs)(delayed_functions(**worker_dict, seed=self.seed+j+i*self.batch_size) for j in range(self.batch_size))
+            else:
+                # parallel trajectory sampling
+                res = []
+                for j in range(self.batch_size):
+                    tmp_res = self.sampler.collect_trajectory_mixed_planning(params=copy.deepcopy(self.thetas), planning_horizon=self.planning_horizon, persistence=self.persistence, seed=self.seed)
+                    res.append(tmp_res)
+
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)
@@ -134,6 +168,7 @@ class CLOLPlanning:
                 estimated_gradient = self.update_gpomdp(
                     reward_vector=reward_vector, score_trajectory=score_vector
                 )
+                # print("Estimated Gradient: ", estimated_gradient)
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
@@ -214,17 +249,22 @@ class CLOLPlanning:
 
 
     def save_results(self) -> None:
-        results = {
-            "performance": np.array(self.performance_idx, dtype=float).tolist(),
-            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
-            "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
-            "last_theta": np.array(self.thetas, dtype=float).tolist(),
-            "best_perf": float(self.best_performance_theta),
-            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
-        }
+        if not self.debug:
+            results = {
+                "performance": np.array(self.performance_idx, dtype=float).tolist(),
+                "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            }
+        else:
+            results = {
+                "performance": np.array(self.performance_idx, dtype=float).tolist(),
+                "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+                "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
+                "last_theta": np.array(self.thetas, dtype=float).tolist(),
+                "best_perf": float(self.best_performance_theta),
+            }
 
         # Save the json
-        name = self.directory + "/pg_results.json"
+        name = self.directory + "/results.json"
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()

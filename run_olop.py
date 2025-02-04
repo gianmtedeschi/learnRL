@@ -1,12 +1,17 @@
 # Libraries
 import argparse
 import datetime
-from algorithms import PolicyGradientSplit, PolicyGradient, ParameterPolicyGradientSplit, CLOLPlanning
+from algorithms import CLOLPlanning
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
 import pickle 
+from common.utils import *
+import random
+import time
+import json
+import io
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -19,7 +24,7 @@ parser.add_argument(
     "--ite",
     help="How many iterations the algorithm must do.",
     type=int,
-    default=100
+    default=5
 )
 parser.add_argument(
     "--estimator",
@@ -46,7 +51,9 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car"]
+    choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car", 
+             "river", "cartpole", "hopper", "walker", "inverted_pendulum",
+             "reacher", "pendulum", "dam"]
 )
 parser.add_argument(
     "--horizon",
@@ -83,7 +90,7 @@ parser.add_argument(
     "--clip",
     help="Whether to clip the action in the environment.",
     type=int,
-    default=1,
+    default=0,
     choices=[0, 1]
 )
 parser.add_argument(
@@ -123,8 +130,42 @@ parser.add_argument(
     type=int,
     default=1
 )
-
-
+parser.add_argument(
+    "--n_jobs",
+    help="Number of workers.",
+    type=int,
+    default=1
+)
+parser.add_argument(
+    "--animate",
+    help="Render the agent",
+    default=False,
+    action='store_true'
+)
+parser.add_argument(
+    "--persistence",
+    help="Use action persistence.",
+    default=False,
+    action='store_true'
+)
+parser.add_argument(
+    "--debug",
+    help="Output the whole set of information.",
+    default=False,
+    action='store_true'
+)
+parser.add_argument(
+    "--starting_seed",
+    help="Starting seed value.",
+    type=int,
+    default=0
+)
+parser.add_argument(
+    "--noise",
+    help="Noise injected in the MDP as std.",
+    type=float,
+    default=0.0
+)
 
 args = parser.parse_args()
 
@@ -137,33 +178,58 @@ else:
 base_dir = args.dir
 base_dir += "_" + datetime.datetime.now().strftime("%m_%d-%H_%M_")
 
+total_time = np.zeros(args.n_trials)
+
 for i in range(args.n_trials):
+    i += args.starting_seed
+
+    start_time = time.time()
+    torch.manual_seed(i)
     np.random.seed(i)
-    dir_name = f"CLOL_Planning_{args.ite}_{args.env}_{args.horizon}_{args.planning_horizon}_{args.lr_strategy}_"
+    random.seed(i)
+
+    dir_name = f"CLOL_Planning_{args.ite}_{args.env}_{args.horizon}_{args.planning_horizon}_{str(args.gamma).replace('.', '')}_{args.lr_strategy}_"
     dir_name += f"{str(args.lr).replace('.', '')}_{args.batch}_"
+    
     if args.clip:
         dir_name += "clip_"
-    else:
-        dir_name += "noclip_"
+    else:       dir_name += "noclip_"
 
+    if args.env == "lq":
+        dir_name += f"dS_{args.lq_state_dim}_dA_{args.lq_action_dim}_"
+    
     """Environment"""
     MULTI_LINEAR = False
 
     if args.env == "swimmer":
         env_class = Swimmer
-        env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        env = Swimmer(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "half_cheetah":
         env_class = HalfCheetah
-        env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "ant":
         env_class = Ant
-        env = Ant(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        env = Ant(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
         MULTI_LINEAR = True
+    elif args.env == "walker":
+        env_class = Walker
+        env = Walker(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
+        MULTI_LINEAR = True
+    elif args.env == "hopper":
+        env_class = Hopper
+        env = Hopper(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
+    elif args.env == "reacher":
+        env_class = Reacher
+        env = Reacher(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
+        MULTI_LINEAR = True
+    elif args.env == "inverted_pendulum":
+        env_class = InvertedPendulum
+        env = InvertedPendulum(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
     elif args.env == "lq":
         env_class = LQ
-        env = LQ(horizon=args.horizon, gamma=args.gamma, action_dim=args.lq_action_dim, state_dim=args.lq_state_dim)
+        env = LQ(horizon=args.horizon, gamma=args.gamma, action_dim=args.lq_action_dim, state_dim=args.lq_state_dim, noise=args.noise)
         MULTI_LINEAR = bool(args.lq_action_dim > 1)
     elif args.env == "minigolf":
         env_class = MiniGolf
@@ -171,12 +237,27 @@ for i in range(args.n_trials):
     elif args.env == "mountain_car":
         env_class = Continuous_MountainCarEnv
         env = Continuous_MountainCarEnv(horizon=args.horizon, gamma=args.gamma)
-        MULTI_LINEAR = True
+    elif args.env == "river":
+        env_class = RiverSwimContinuous
+        env = RiverSwimContinuous(horizon=args.horizon, gamma=args.gamma)
+    elif args.env == "cartpole":
+        env_class = ContCartPole
+        env = ContCartPole(horizon=args.horizon, gamma=args.gamma)
+    elif args.env == "pendulum":
+        env_class = PendulumEnv
+        env = PendulumEnv(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
+    elif args.env == "dam":
+        env_class = Dam
+        env = Dam(horizon=args.horizon, gamma=args.gamma)
     else:
         raise ValueError(f"Invalid env name.")
 
     s_dim = env.state_dim
-    a_dim = env.action_dim * args.planning_horizon
+    if args.persistence:
+        a_dim = env.action_dim
+        dir_name += f"_persistence"
+    else:
+        a_dim = env.action_dim * args.planning_horizon
 
     """Data Processor"""
     dp = IdentityDataProcessor()
@@ -195,15 +276,16 @@ for i in range(args.n_trials):
         )
     elif args.pol in ["nn", "deep_gaussian"]:
         net = nn.Sequential(
-            nn.Linear(s_dim, 16, bias=False),
+            nn.Linear(s_dim, 50, bias=False),
             nn.Tanh(),
-            nn.Linear(16, 16, bias=False),
+            nn.Linear(50, 25, bias=False),
             nn.Tanh(),
-            nn.Linear(16, a_dim, bias=False),
+            nn.Linear(25, a_dim, bias=False),
             nn.Tanh()
         )
         model_desc = dict(
-            layers_shape=[(s_dim, 16), (16, 16), (16, a_dim)]
+            layers_shape=[(s_dim, 50), (50, 25), (25, a_dim)]
+            # layers_shape=[(s_dim, a_dim)]
         )
         if args.pol == "nn":
             pol = NeuralNetworkPolicy(
@@ -230,7 +312,9 @@ for i in range(args.n_trials):
     else:
         raise ValueError(f"Invalid policy name.")
 
-    dir_name += f"_{args.pol}_{tot_params}_std_{string_var}"
+    dir_name += f"_{args.pol}_{tot_params}_std_{string_var}_noise_{str(args.noise).replace('.', '')}"
+    dir_render = base_dir + dir_name + "/render.gif" 
+    time_dir = base_dir + dir_name + "/time.json"
     dir_name = base_dir + dir_name + "/" + f"trial_{i}"
 
     """Algorithms"""
@@ -238,7 +322,6 @@ for i in range(args.n_trials):
         lr=[args.lr],
         lr_strategy=args.lr_strategy,
         estimator_type=args.estimator,
-        # initial_theta=[0] * tot_params,
         initial_theta=pol.parameters,
         ite=args.ite,
         batch_size=args.batch,
@@ -249,7 +332,11 @@ for i in range(args.n_trials):
         verbose=args.verbose,
         checkpoint_freq=50,
         baselines=args.baseline,
-        planning_horizon=args.planning_horizon
+        planning_horizon=args.planning_horizon,
+        debug = args.debug,
+        n_jobs = args.n_jobs,
+        persistence = args.persistence,
+        seed=i
     )
     alg = CLOLPlanning(**alg_parameters)
     
@@ -259,5 +346,22 @@ for i in range(args.n_trials):
     print(args)
     print(text2art("Learn Start"))
     alg.learn()
+    end_time = time.time()
     alg.save_results()
     print(alg.performance_idx)
+    
+    time_trial = end_time - start_time
+    total_time[i] = time_trial
+
+time_res = { "time": np.array(total_time, dtype=float).tolist()}
+with io.open(time_dir, 'w', encoding='utf-8') as f:
+        f.write(json.dumps(time_res, ensure_ascii=False, indent=4))
+        f.close()
+
+if args.animate:
+    eval_env = env_class(horizon=args.horizon, gamma=args.gamma, render_mode="rgb_array")
+    perf_mean, perf_std, frames = evaluate_planning(eval_env, pol, num_episodes=1, horizon=args.horizon)
+    imageio.mimsave(dir_render, frames, duration=33)
+
+    # perf_mean, perf_std, frames = evaluate(env, pol, gamma=args.gamma, num_episodes=1, horizon=args.horizon)
+    # animate(frames)

@@ -14,7 +14,7 @@ class Ant(MujocoBase):
     """Ant Wrapper for the environment by GYM."""
     def __init__(
             self, horizon: int = 0, gamma: float = 0.99, verbose: bool = False,
-            render: bool = False, clip: bool = True
+            render_mode=None, clip: bool = False
     ) -> None:
         super().__init__(
             horizon=horizon,
@@ -22,11 +22,6 @@ class Ant(MujocoBase):
             verbose=verbose,
             clip=clip
         )
-        self.render = render
-        render_mode = None
-        if self.render:
-            render_mode = "human"
-
         self.gym_env = gym.make(
             'Ant-v4',
             render_mode=render_mode

@@ -10,6 +10,7 @@ import gym
 import gym.spaces as spaces
 from gym.utils import seeding
 import numpy as np
+from gymnasium.error import DependencyNotInstalled
 
 logger = logging.getLogger(__name__)
 
@@ -67,16 +68,18 @@ class ContCartPole(gym.Env):
         self.carttrans = None
         self.np_random = None
 
+        self.screen_width = 600
+        self.screen_height = 400
+        self.screen = None
+        self.clock = None
+        self.isopen = True
+
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def step(self, action):
         action = np.ravel(action)
-        action = np.clip(
-            action,
-            0, 1
-        )
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state
@@ -110,13 +113,109 @@ class ContCartPole(gym.Env):
             reward = 0.0
         return np.ravel(self.state), reward, done, {}
 
-    def reset(self, initial=None):
+    def reset(self, initial=None, seed=None):
+        np.random.seed(seed)
         if initial is None:
             self.state = np.array(self.np_random.uniform(low=-0.05, high=0.05, size=(4,)))
         else:
             self.state = initial
-        self.steps_beyond_done = None
-        return np.ravel(self.state)
+            self.steps_beyond_done = None
+            return np.ravel(self.state)
 
-    def render(self, mode='human', close=False):
-        pass
+        if self.render_mode is None:
+            assert self.spec is not None
+            gym.logger.warn(
+                "You are calling render method without specifying any render mode. "
+                "You can specify the render_mode at initialization, "
+                f'e.g. gym.make_vec("{self.spec.id}", render_mode="rgb_array")'
+            )
+            return
+
+        try:
+            import pygame
+            from pygame import gfxdraw
+        except ImportError:
+            raise DependencyNotInstalled(
+                'pygame is not installed, run `pip install "gymnasium[classic_control]"`'
+            )
+
+        if self.screens is None:
+            pygame.init()
+
+            self.screens = [
+                pygame.Surface((self.screen_width, self.screen_height))
+                for _ in range(self.num_envs)
+            ]
+
+        world_width = self.x_threshold * 2
+        scale = self.screen_width / world_width
+        polewidth = 10.0
+        polelen = scale * (2 * self.length)
+        cartwidth = 50.0
+        cartheight = 30.0
+
+        if self.state is None:
+            raise ValueError(
+                "Cartpole's state is None, it probably hasn't be reset yet."
+            )
+
+        for x, screen in zip(self.state.T, self.screens):
+            assert isinstance(x, np.ndarray) and x.shape == (4,)
+
+            self.surf = pygame.Surface((self.screen_width, self.screen_height))
+            self.surf.fill((255, 255, 255))
+
+            l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
+            axleoffset = cartheight / 4.0
+            cartx = x[0] * scale + self.screen_width / 2.0  # MIDDLE OF CART
+            carty = 100  # TOP OF CART
+            cart_coords = [(l, b), (l, t), (r, t), (r, b)]
+            cart_coords = [(c[0] + cartx, c[1] + carty) for c in cart_coords]
+            gfxdraw.aapolygon(self.surf, cart_coords, (0, 0, 0))
+            gfxdraw.filled_polygon(self.surf, cart_coords, (0, 0, 0))
+
+            l, r, t, b = (
+                -polewidth / 2,
+                polewidth / 2,
+                polelen - polewidth / 2,
+                -polewidth / 2,
+            )
+
+            pole_coords = []
+            for coord in [(l, b), (l, t), (r, t), (r, b)]:
+                coord = pygame.math.Vector2(coord).rotate_rad(-x[2])
+                coord = (coord[0] + cartx, coord[1] + carty + axleoffset)
+                pole_coords.append(coord)
+            gfxdraw.aapolygon(self.surf, pole_coords, (202, 152, 101))
+            gfxdraw.filled_polygon(self.surf, pole_coords, (202, 152, 101))
+
+            gfxdraw.aacircle(
+                self.surf,
+                int(cartx),
+                int(carty + axleoffset),
+                int(polewidth / 2),
+                (129, 132, 203),
+            )
+            gfxdraw.filled_circle(
+                self.surf,
+                int(cartx),
+                int(carty + axleoffset),
+                int(polewidth / 2),
+                (129, 132, 203),
+            )
+
+            gfxdraw.hline(self.surf, 0, self.screen_width, carty, (0, 0, 0))
+
+            self.surf = pygame.transform.flip(self.surf, False, True)
+            screen.blit(self.surf, (0, 0))
+
+        return [
+            np.transpose(np.array(pygame.surfarray.pixels3d(screen)), axes=(1, 0, 2))
+            for screen in self.screens
+        ]
+
+    def close(self):
+        if self.screens is not None:
+            import pygame
+
+            pygame.quit()

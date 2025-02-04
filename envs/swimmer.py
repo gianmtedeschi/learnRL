@@ -14,7 +14,7 @@ class Swimmer(MujocoBase):
     """Swimmer Wrapper for the environment by GYM."""
     def __init__(
             self, horizon: int = 0, gamma: float = 0.99, verbose: bool = False,
-            render: bool = False, clip: bool = True
+            render_mode=None, clip: bool = False
     ) -> None:
         super().__init__(
             horizon=horizon,
@@ -22,13 +22,8 @@ class Swimmer(MujocoBase):
             verbose=verbose,
             clip=clip
         )
-        self.render = render
-        render_mode = None
-        if self.render:
-            render_mode = "human"
-
         self.gym_env = gym.make(
-            'Swimmer-v4',
+            'Swimmer-v5',
             render_mode=render_mode
         )
         self.action_bounds = [-1, 1]
@@ -48,4 +43,3 @@ class Swimmer(MujocoBase):
         else:
             clipped_action = action
         return super().step(action=clipped_action)
-        # return super().step(action=action)

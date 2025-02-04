@@ -8,8 +8,45 @@ import numpy as np
 import math
 import copy
 from common.utils import *
+from joblib import Parallel, delayed
 
-# class
+# worker method for parallel computation
+def planning_sampling_worker(
+        env: BaseEnv = None,
+        pol: BasePolicy = None,
+        dp: BaseProcessor = None,
+        params: np.ndarray = None,
+        starting_state: np.ndarray = None,
+        planning_horizon: int = 1,
+        persistence: bool = False,
+        seed: int = 0
+) -> list:
+    """Worker collecting a single trajectory.
+
+    Args:
+        env (BaseEnv, optional): the env to employ. Defaults to None.
+        
+        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        
+        dp (Baseprocessor, optional): the data processor to employ. 
+        Defaults to None.
+        
+        params (np.array, optional): the parameters to plug into the policy. 
+        Defaults to None.
+        
+        starting_state (np.array, optional): the state to which the env should 
+        be initialized. Defaults to None.
+
+    Returns:
+        list: [performance, reward, scores]
+    """
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
+    res = trajectory_sampler.collect_trajectory_mixed_planning(params=params, starting_state=starting_state, planning_horizon=planning_horizon, persistence=persistence, seed=seed)
+    
+    return res
+
+
+# sampler class for action-based methods
 class TrajectorySampler:
     def __init__(
             self, env: BaseEnv = None,
@@ -94,9 +131,9 @@ class TrajectorySampler:
                 break
 
         return [perf, rewards, scores, states]
-
+    
     def collect_trajectory_mixed_planning(
-            self, params: np.array = None, starting_state=None, planning_horizon=1
+            self, params: np.array = None, starting_state=None, planning_horizon=1, persistence=False, seed=0
     ) -> list:
         """
         Summary:
@@ -104,7 +141,8 @@ class TrajectorySampler:
             configuration.
         Args:
             params (np.array): the current sampling of theta values
-            starting_state (any): teh starting state for the iterations
+            starting_state (any): the starting state for the iterations
+            planning_horizon: the horizon of planning 
         Returns:
             list of:
                 float: the discounted reward of the trajectory
@@ -112,12 +150,12 @@ class TrajectorySampler:
                 np.array: vector of all the scores
         """
         # reset the environment
-        self.env.reset()
+        self.env.reset(seed=seed)
         if starting_state is not None:
             self.env.state = copy.deepcopy(starting_state)
 
         # initialize parameters
-        np.random.seed()
+        np.random.seed(seed)
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
@@ -125,10 +163,11 @@ class TrajectorySampler:
         if params is not None:
             self.pol.set_parameters(thetas=copy.deepcopy(params))
 
+        state = self.env.state
         # act
         for t in range(math.ceil(self.env.horizon/planning_horizon)):
             # retrieve the state
-            state = self.env.state
+            # state = self.env.state
 
             # transform the state
             features = self.dp.transform(state=state)
@@ -139,19 +178,25 @@ class TrajectorySampler:
             # compute the score
             score = self.pol.compute_score(state=features, action=action)
 
+            if persistence:
+                # repeat the action for the planning horizon
+                action = np.tile(action, planning_horizon).ravel()
+
             # reshape the action according to the planning horizon
             action = np.array(np.split(action, planning_horizon))
 
             seq_reward = .0
-            for a in action:
+            for i, a in enumerate(action):
                 # play the action
                 state, rew, done, _ = self.env.step(action=a)
-                seq_reward += rew
+                seq_reward += (self.env.gamma ** i) * rew
+                # noisy state
+                # state += np.random.normal(loc=0, scale=0.5, size=self.env.state_dim)
                 if done:
                     break
 
             # update the performance index
-            perf += (self.env.gamma ** t) * seq_reward
+            perf += (self.env.gamma ** (t * planning_horizon)) * seq_reward
 
             # update the vectors of rewards scores and state
             rewards[t] = seq_reward
@@ -165,6 +210,8 @@ class TrajectorySampler:
 
         return [perf, rewards, scores]
 
+
+# sampler class for parameter-based method
 class ParameterSampler:
     """Sampler for PGPE."""
     def __init__(

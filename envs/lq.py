@@ -28,7 +28,9 @@ class LQ(BaseEnv):
                  horizon=100,
                  gamma=0.9,
                  action_dim=1,
-                 state_dim=1) -> None:
+                 state_dim=1,
+                 noise=0,
+                 seed=None) -> None:
 
         self.state_dim = state_dim  # state dimension
         self.action_dim = action_dim  # action dimension
@@ -36,7 +38,7 @@ class LQ(BaseEnv):
         self.gamma = gamma  # discount factor
         self.max_pos = 10 * np.ones(self.state_dim)  # max state for clipping
         self.max_action = np.inf * np.ones(self.action_dim)  # max action for clipping
-        self.sigma_noise = 0 * np.eye(self.state_dim)  # std dev of environment noise
+        self.sigma_noise = noise * np.eye(self.state_dim)  # std dev of environment noise
         self.A = np.eye(self.state_dim) * 0.9
         self.B = np.eye(self.state_dim, self.action_dim) * 0.9
         self.Q = 1 * np.eye(self.state_dim)
@@ -70,7 +72,7 @@ class LQ(BaseEnv):
         return self.get_state(), -(cost).item(), self.timestep >= self.horizon, {
             'action_dimnger': 0}  # done after fixed horizon (manual reset)
 
-    def reset(self, state=None):
+    def reset(self, state=None, seed=None):
         """
         By default, uniform initialization
         """
