@@ -28,10 +28,18 @@ All you need is in `run.py`, which requires several parameters:
 - "--n_trials": specifies how many run of the same experiments has to be done.
 - "--verbose": print debug information.
 - "--baseline": specifies which baselinse adopt
+- "--animate": specifices if you want to render the environment
+- "--debug": specifies if you want to log all the information regarding the training
+- "--noise": specifies the noise to add to the observation
+- "--starting_seed": specifies the value of the first seed to use in the trials
 
 Only for the GAPS algorithm:
 - "--alpha": specifies the alpha parameter for the split check criteria;
 - "--max_splits": specifies the maximum number of split that can be performed;
+
+Only for the W-MDPs implementation:
+- "--planning_horizon": specifies the parameter W;
+- "--persistence": specifies if you want to persist an action
 
 Only for the LQR environment:
 - "--lq_state_dim": specifies the state dimension for the LQR environment;

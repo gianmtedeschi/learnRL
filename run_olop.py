@@ -362,6 +362,3 @@ if args.animate:
     eval_env = env_class(horizon=args.horizon, gamma=args.gamma, render_mode="rgb_array")
     perf_mean, perf_std, frames = evaluate_planning(eval_env, pol, num_episodes=1, horizon=args.horizon)
     imageio.mimsave(dir_render, frames, duration=33)
-
-    # perf_mean, perf_std, frames = evaluate(env, pol, gamma=args.gamma, num_episodes=1, horizon=args.horizon)
-    # animate(frames)
