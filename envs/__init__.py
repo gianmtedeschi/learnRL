@@ -11,6 +11,6 @@ from envs.minigolf import *
 from envs.reacher import *
 from envs.pusher import *
 from envs.river_swim_continuous import *
-from envs.walker import *
 from envs.inverted_pendulum import *
 from envs.dam import *
+from envs.ns_cartpole import *

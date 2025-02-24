@@ -51,7 +51,9 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
         self.param_idx = np.cumsum(self.params_per_layer)
         self.tot_params = np.sum(self.params_per_layer)
 
-        self.parameters = self.get_parameters()
+        if self.parameters is None:
+            self.parameters = self.get_parameters()
+        
         self.set_parameters(self.parameters)
 
         

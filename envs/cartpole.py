@@ -25,6 +25,7 @@ class ContCartPole(gym.Env):
         # todo do better
         self.horizon = horizon
         self.gamma = gamma
+        # self.render_mode = render_mode
         self.action_bounds = [-10, 10]
         self.state_dim = 4
         self.action_dim = 1

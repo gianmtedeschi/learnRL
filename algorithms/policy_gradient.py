@@ -9,10 +9,9 @@ from data_processors import BaseProcessor, IdentityDataProcessor
 
 # todo
 from common.utils import TrajectoryResults
-from simulation.trajectory_sampler import TrajectorySampler
 
-# necessary?
 from joblib import Parallel, delayed
+from simulation.trajectory_sampler import TrajectorySampler, pg_sampling_worker
 
 import json
 import io
@@ -43,7 +42,9 @@ class PolicyGradient:
             natural: bool = False,
             baselines: str = None,
             checkpoint_freq: int = 1,
-            n_jobs: int = 1
+            n_jobs: int = 1,
+            debug: bool = False,
+            seed = 0
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG] lr must be positive!"
@@ -86,9 +87,11 @@ class PolicyGradient:
         self.baselines = baselines
         self.checkpoint_freq = checkpoint_freq
         self.n_jobs = n_jobs
-        # self.parallel_computation = bool(self.n_jobs != 1)
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
+        self.parallel_sampling = bool(self.n_jobs != 1)
+        self.debug = debug
+        self.seed = seed
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -113,11 +116,29 @@ class PolicyGradient:
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            res = []
-            for j in range(self.batch_size):
-                tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
-                res.append(tmp_res)
+            if self.parallel_sampling:
+                # parallel trajectory sampling
+                # prepare the parameters
+                self.policy.set_parameters(copy.deepcopy(self.thetas))
+                worker_dict = dict(
+                    env=copy.deepcopy(self.env),
+                    pol=copy.deepcopy(self.policy),
+                    dp=copy.deepcopy(self.data_processor),
+                    params=copy.deepcopy(self.thetas),
+                    # seed=self.seed
+                )
 
+                # build the parallel functions
+                delayed_functions = delayed(pg_sampling_worker)
+
+                # parallel computation
+                res = Parallel(n_jobs=self.n_jobs)(delayed_functions(**worker_dict, seed=self.seed+j+i*self.batch_size) for j in range(self.batch_size))
+            else:
+                res = []
+                for j in range(self.batch_size):
+                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas), seed=self.seed)
+                    res.append(tmp_res)
+            
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)
             score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim),
@@ -222,17 +243,22 @@ class PolicyGradient:
 
 
     def save_results(self) -> None:
-        results = {
-            "performance": np.array(self.performance_idx, dtype=float).tolist(),
-            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
-            "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
-            "last_theta": np.array(self.thetas, dtype=float).tolist(),
-            "best_perf": float(self.best_performance_theta),
-            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
-        }
+        if not self.debug:
+            results = {
+                "performance": np.array(self.performance_idx, dtype=float).tolist(),
+                "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            }
+        else:
+            results = {
+                "performance": np.array(self.performance_idx, dtype=float).tolist(),
+                "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+                "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
+                "last_theta": np.array(self.thetas, dtype=float).tolist(),
+                "best_perf": float(self.best_performance_theta),
+            }
 
         # Save the json
-        name = self.directory + "/pg_results.json"
+        name = self.directory + "/results.json"
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()

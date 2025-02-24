@@ -45,6 +45,37 @@ def planning_sampling_worker(
     
     return res
 
+def pg_sampling_worker(
+        env: BaseEnv = None,
+        pol: BasePolicy = None,
+        dp: BaseProcessor = None,
+        params: np.ndarray = None,
+        starting_state: np.ndarray = None,
+        seed: int = 0
+) -> list:
+    """Worker collecting a single trajectory.
+
+    Args:
+        env (BaseEnv, optional): the env to employ. Defaults to None.
+        
+        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        
+        dp (Baseprocessor, optional): the data processor to employ. 
+        Defaults to None.
+        
+        params (np.array, optional): the parameters to plug into the policy. 
+        Defaults to None.
+        
+        starting_state (np.array, optional): the state to which the env should 
+        be initialized. Defaults to None.
+
+    Returns:
+        list: [performance, reward, scores]
+    """
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
+    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, seed=seed)
+    
+    return res
 
 # sampler class for action-based methods
 class TrajectorySampler:
@@ -68,7 +99,7 @@ class TrajectorySampler:
         return
 
     def collect_trajectory(
-            self, params: np.array = None, starting_state=None, split=False
+            self, params: np.array = None, starting_state=None, split=False, seed=0
     ) -> list:
         """
         Summary:
@@ -84,12 +115,12 @@ class TrajectorySampler:
                 np.array: vector of all the scores
         """
         # reset the environment
-        self.env.reset()
+        self.env.reset(seed=seed)
         if starting_state is not None:
             self.env.state = copy.deepcopy(starting_state)
 
         # initialize parameters
-        np.random.seed()
+        np.random.seed(seed)
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         if split:
@@ -129,8 +160,11 @@ class TrajectorySampler:
                     rewards[t+1:] = 0
                     scores[t+1:] = 0
                 break
-
-        return [perf, rewards, scores, states]
+        
+        if split:
+            return [perf, rewards, scores, states]
+        else:  
+            return [perf, rewards, scores]
     
     def collect_trajectory_mixed_planning(
             self, params: np.array = None, starting_state=None, planning_horizon=1, persistence=False, seed=0
