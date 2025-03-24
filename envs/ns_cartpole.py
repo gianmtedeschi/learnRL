@@ -39,7 +39,9 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         external_force_beta: float = .3,
         external_force_mag : float = 2.0, # Force magnitude when sampling from beta, catastrophic event
         horizon = 500,
-        gamma = 1
+        gamma = 1,
+        force_mag = 10.0,
+        mu_p = 0.01,
     ):
         self.horizon = horizon
         self.gamma = gamma
@@ -52,7 +54,8 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.total_mass = self.masspole + self.masscart
         self.length = 0.5  # actually half the pole's length
         self.polemass_length = self.masspole * self.length
-        self.force_mag = 10.0
+        self.force_mag = force_mag
+        self.mu_p = mu_p  # fixed friction coefficient
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = "euler"
 
@@ -130,7 +133,7 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         # FRICTION
         
         # Increasing friction with theta
-        mu_p = 0.01 + 0.09 * (1 - np.exp(-((theta / self.theta_threshold_radians)*2, 20))) / (1 - np.exp(-20))
+        # mu_p = 0.01 + 0.09 * (1 - np.exp(-((theta / self.theta_threshold_radians)**2 * 20))) / (1 - np.exp(-20))
         
         # No friction
         # mu_p = 0.01 # const friction, minimum
@@ -142,13 +145,14 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         ) / self.total_mass
         
         # Stochastic External Tip Force Injection
+        # Ignore true clause for now
         if bool(theta < self.theta_threshold_radians or theta > (2 * np.pi - self.theta_threshold_radians)):
             if self.np_random.random() >= self.external_force_probability:
                 # sample disturbance from a gaussian distribution 
                 F_tip = self.np_random.normal(self.external_force_mean, self.external_force_std)
             else:
                 # sample disturbance from the Beta
-                print("disturbacnce!")
+                print("disturbance!")
                 """
                 TO-DO: signal when the beta is sampled during evaluation for feedback.
                 - render the environment only when the beta is sampled to check behaviour of the agent.
@@ -160,12 +164,13 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             
             # compute modified angular acceleration
             extra_term = (2*F_tip)/self.masspole
-            thetaacc = (self.gravity * sintheta - costheta * temp - (mu_p*theta_dot/self.polemass_length)+extra_term) / (
+            thetaacc = (self.gravity * sintheta - costheta * temp - (self.mu_p*theta_dot/self.polemass_length)+extra_term) / (
                 self.length
                 * (4.0 / 3.0 - self.masspole * np.square(costheta) / self.total_mass)
             )
+        # Focus here
         else:
-            thetaacc = (self.gravity * sintheta - costheta * temp - (mu_p*theta_dot/self.polemass_length)) / (
+            thetaacc = (self.gravity * sintheta - costheta * temp - (self.mu_p*theta_dot/self.polemass_length)) / (
                 self.length
                 * (4.0 / 3.0 - self.masspole * np.square(costheta) / self.total_mass)
                 )
@@ -184,6 +189,7 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             theta = theta + self.tau * theta_dot
 
         # Wrap theta to [0, 2*pi]
+        # Fix here
         theta = theta % (2 * np.pi)
         
         # update the state after integration
@@ -199,7 +205,8 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         # the reward for the environment - negative to encode notion of cost
         reward = np.cos(theta.item())
-        reward -=  0.001 * (theta_dot.item()**2) + 0.001*(x_dot.item()**2)+0.001*(x.item()**2)
+        
+        reward -=  0.001 *( theta_dot.item()**2) + 0.001*(x_dot.item()**2)+0.001*(x.item()**2)
         reward -= termination_penalty # extra penalty for going out of bounds
         # add termination penalty if goes out of bounds
         # if self.render_mode == "human":

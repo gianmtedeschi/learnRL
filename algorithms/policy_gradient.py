@@ -47,8 +47,8 @@ class PolicyGradient:
             seed = 0
     ) -> None:
         # Class' parameter with checks
-        err_msg = "[PG] lr must be positive!"
-        assert lr[0] > 0, err_msg
+        # err_msg = "[PG] lr must be positive!"
+        # assert lr[0] > 0, err_msg
         self.lr = lr[0]
 
         err_msg = "[PG] lr_strategy not valid!"
@@ -97,6 +97,7 @@ class PolicyGradient:
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
         self.time = 0
         self.performance_idx = np.zeros(ite, dtype=np.float64)
+        self.estimated_gradient = np.zeros(ite, dtype=np.float64)
         self.best_theta = np.zeros(self.dim, dtype=np.float64)
         self.best_performance_theta = -np.inf
         self.sampler = TrajectorySampler(
@@ -157,10 +158,10 @@ class PolicyGradient:
 
             # Compute the estimated gradient
             if self.estimator_type == "REINFORCE":
-                estimated_gradient = np.mean(
+                self.estimated_gradient = np.mean(
                     perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
             elif self.estimator_type == "GPOMDP":
-                estimated_gradient = self.update_gpomdp(
+                self.estimated_gradient = self.update_gpomdp(
                     reward_vector=reward_vector, score_trajectory=score_vector
                 )
             else:
@@ -169,9 +170,9 @@ class PolicyGradient:
 
             # Update parameters
             if self.lr_strategy == "constant":
-                self.thetas = self.thetas + self.lr * estimated_gradient
+                self.thetas = self.thetas + self.lr * self.estimated_gradient
             elif self.lr_strategy == "adam":
-                adaptive_lr = self.adam_optimizer.next(estimated_gradient)
+                adaptive_lr = self.adam_optimizer.next(self.estimated_gradient)
                 self.thetas = self.thetas + adaptive_lr
             else:
                 err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
@@ -182,7 +183,7 @@ class PolicyGradient:
                 print("*" * 30)
                 print(f"Step: {self.time}")
                 print(f"Mean Performance: {self.performance_idx[self.time - 1]}")
-                print(f"Estimated gradient: {estimated_gradient}")
+                print(f"Estimated gradient: {self.estimated_gradient}")
                 print(f"Parameter (new) values: {self.thetas}")
                 print(f"Best performance so far: {self.best_performance_theta}")
                 print(f"Best configuration so far: {self.best_theta}")
@@ -222,12 +223,12 @@ class PolicyGradient:
 
         reward_trajectory = (reward_vector[...,None] - b[np.newaxis,...]) * rolling_scores
 
-        estimated_gradient = np.mean(
+        self.estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
 
-        # print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, estimated_gradient.shape)
-        return estimated_gradient
+        # print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
+        return self.estimated_gradient
 
     def update_best_theta(self, current_perf: np.float64) -> None:
         if self.best_theta is None or self.best_performance_theta <= current_perf:
@@ -247,6 +248,7 @@ class PolicyGradient:
             results = {
                 "performance": np.array(self.performance_idx, dtype=float).tolist(),
                 "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+                "gradient_history": np.array(self.estimated_gradient, dtype=np.float64).tolist(),
             }
         else:
             results = {

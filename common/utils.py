@@ -4,6 +4,8 @@ from matplotlib import animation
 from matplotlib import rc
 from tqdm import tqdm
 import imageio
+import io
+import json
 
 """Utils functions"""
 
@@ -38,7 +40,7 @@ class SplitResults:
     ValidTrajectories = 3
 
 
-def evaluate_planning(env, policy, num_episodes=100, horizon=200, persistence=False, planning_horizon=1):
+def evaluate_planning(env, policy, num_episodes=1, horizon=500, persistence=False, planning_horizon=1, dir=None):
     """
     Evaluate a RL agent
     :param env: (Env object) the Gym environment
@@ -92,7 +94,20 @@ def evaluate_planning(env, policy, num_episodes=100, horizon=200, persistence=Fa
           "Std reward:", std_episode_reward,
           "Num episodes:", num_episodes)
     
-    return mean_episode_reward, std_episode_reward, frames
+    save_results(all_episode_rewards, dir)
+    return frames
+
+def save_results(returns, dir) -> None:        
+        pass
+        # results = {
+        #     "performance": np.array(returns, dtype=float).tolist(),
+        # }
+        # # Save the json
+        # name = self.directory + "/results.json"
+        # with io.open(name, 'w', encoding='utf-8') as f:
+        #     f.write(json.dumps(results, ensure_ascii=False, indent=4))
+        #     f.close()
+        # return
 
 def animate(data, interval=200):
   fig = plt.figure(1)

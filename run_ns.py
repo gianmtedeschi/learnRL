@@ -50,10 +50,10 @@ parser.add_argument(
     "--env",
     help="The environment.",
     type=str,
-    default="ns_cartpole",
+    default="ns_cartpole_2",
     choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car", 
              "river", "cartpole", "hopper", "walker", "inverted_pendulum",
-             "reacher", "pendulum", "dam", "ns_cartpole"]
+             "reacher", "pendulum", "dam", "ns_cartpole", "ns_cartpole_2"]
 )
 parser.add_argument(
     "--horizon",
@@ -128,7 +128,7 @@ parser.add_argument(
     "--n_jobs",
     help="Number of workers.",
     type=int,
-    default=2
+    default=1
 )
 parser.add_argument(
     "--animate",
@@ -159,6 +159,18 @@ parser.add_argument(
     help="Evaluate the policy without training.",
     default=False,
     action='store_true'
+)
+parser.add_argument(
+    "--force",
+    help="Only for cartpole, define the force scale.",
+    type=float,
+    default=10.0
+)
+parser.add_argument(
+    "--friction",
+    help="Only for cartpole, define the fixed friction coefficient.",
+    type=float,
+    default=0.01
 )
 
 args = parser.parse_args()
@@ -192,6 +204,9 @@ for i in range(args.n_trials):
     if args.env == "lq":
         dir_name += f"dS_{args.lq_state_dim}_dA_{args.lq_action_dim}_"
     
+    if args.env == "ns_cartpole" or args.env == "ns_cartpole_2":
+        dir_name += f"force_{args.force}_mu_p_{args.friction}_"
+    
     """Environment"""
     MULTI_LINEAR = False
 
@@ -209,7 +224,11 @@ for i in range(args.n_trials):
         MULTI_LINEAR = True
     elif args.env == "ns_cartpole":
         env_class = NsCartPoleEnv
-        env = NsCartPoleEnv(horizon=args.horizon, gamma=args.gamma)
+        env = NsCartPoleEnv(horizon=args.horizon, gamma=args.gamma, force_mag=args.force, mu_p=args.friction)
+        MULTI_LINEAR = True
+    elif args.env == "ns_cartpole_2":
+        env_class = CartPoleEnv
+        env = CartPoleEnv(horizon=args.horizon, gamma=args.gamma, mu_p=args.friction)
         MULTI_LINEAR = True
     elif args.env == "hopper":
         env_class = Hopper
@@ -287,8 +306,8 @@ for i in range(args.n_trials):
             )
         elif args.pol == "deep_gaussian":
             pol = DeepGaussianPolicy(
-                parameters=np.load('/Users/gianmarcotedeschi/Projects/learnRL/result_debug/_02_24-00_11_PG_500_ns_cartpole_500_10_adam_0005_100_noclip__deep_gaussian_1475_std_1_noise_00/trial_0/policy_params.npy'),
-                # parameters=None,
+                # parameters=np.load('/Users/gianmarcotedeschi/Projects/learnRL/results_swingup/_03_21-17_32_PG_300_ns_cartpole_2_2000_10_adam_0005_100_noclip_force_10.0_mu_p_0.001__deep_gaussian_1475_std_1_noise_00/trial_0/policy_params.npy'),
+                parameters=None,
                 input_size=s_dim,
                 output_size=a_dim,
                 model=copy.deepcopy(net),
@@ -338,7 +357,7 @@ for i in range(args.n_trials):
     end_time = time.time()
     alg.save_results()
     # save the policy parameters for each trail
-    np.save(f"{dir_name}/policy_params", pol.get_parameters())
+    np.save(f"{dir_name}/policy_params", alg.best_theta)
     print(alg.performance_idx)
     
     time_trial = end_time - start_time
@@ -351,5 +370,5 @@ with io.open(time_dir, 'w', encoding='utf-8') as f:
 
 if args.animate:
     eval_env = env_class(horizon=args.horizon, gamma=args.gamma, render_mode="rgb_array")
-    perf_mean, perf_std, frames = evaluate_planning(eval_env, pol, num_episodes=1, horizon=args.horizon)
+    frames = evaluate_planning(eval_env, pol, num_episodes=1, horizon=args.horizon, dir=dir_name)
     imageio.mimsave(dir_render, frames, duration=33)
