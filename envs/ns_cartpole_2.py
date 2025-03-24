@@ -145,7 +145,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             self.steps_beyond_terminated += 1
             reward = 0.0
 
-        reward = -(theta^2 + 0.1 * theta_dot^2 + 0.001 * thetaacc^2)
+        reward = -(theta**2 + 0.1 * theta_dot**2 + 0.001 * thetaacc**2)
 
         if self.render_mode == "human":
             self.render()
