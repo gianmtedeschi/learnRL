@@ -50,7 +50,7 @@ parser.add_argument(
     "--env",
     help="The environment.",
     type=str,
-    default="ns_cartpole_2",
+    default="pendulum",
     choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car", 
              "river", "cartpole", "hopper", "walker", "inverted_pendulum",
              "reacher", "pendulum", "dam", "ns_cartpole", "ns_cartpole_2"]
@@ -133,7 +133,7 @@ parser.add_argument(
 parser.add_argument(
     "--animate",
     help="Render the agent",
-    default=False,
+    default=True,
     action='store_true'
 )
 parser.add_argument(
@@ -258,7 +258,7 @@ for i in range(args.n_trials):
         env = ContCartPole(horizon=args.horizon, gamma=args.gamma)
     elif args.env == "pendulum":
         env_class = PendulumEnv
-        env = PendulumEnv(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
+        env = PendulumEnv(horizon=args.horizon, gamma=args.gamma)
     elif args.env == "dam":
         env_class = Dam
         env = Dam(horizon=args.horizon, gamma=args.gamma)

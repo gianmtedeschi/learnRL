@@ -69,7 +69,7 @@ def evaluate_planning(env, policy, num_episodes=1, horizon=500, persistence=Fals
             seq_reward = .0
             for i, a in enumerate(action):
                 # play the action
-                obs, rew, done, _ = env.step(action=a)
+                obs, rew, done, _ = env.step(a)
                 seq_reward += (env.gamma ** i) * rew
                 if done:
                     break

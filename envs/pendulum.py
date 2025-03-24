@@ -90,7 +90,7 @@ class PendulumEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, render_mode: Optional[str] = None, g=10.0):
+    def __init__(self, render_mode: Optional[str] = None, g=10.0, friction=0, horizon=200, gamma=1):
         self.max_speed = 8
         self.max_torque = 2.0
         self.dt = 0.05
@@ -114,8 +114,14 @@ class PendulumEnv(gym.Env):
         )
         self.observation_space = spaces.Box(low=-high, high=high, dtype=np.float32)
 
+        self.gamma = gamma
+        self.horizon = horizon
+        self.friction = friction
+        self.action_dim = self.action_space.shape[0]
+        self.state_dim = self.observation_space.shape[0]
+
     def step(self, u):
-        th, thdot = self.state  # th := theta
+        th, thdot = self.thetas  # th := theta
 
         g = self.g
         m = self.m
@@ -130,11 +136,14 @@ class PendulumEnv(gym.Env):
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
         newth = th + newthdot * dt
 
-        self.state = np.array([newth, newthdot])
+        self.thetas = np.array([newth, newthdot])
+
+        self.state = self._get_obs()
 
         if self.render_mode == "human":
             self.render()
-        return self._get_obs(), -costs, False, False, {}
+        
+        return self.state, -costs, False, False
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -149,15 +158,16 @@ class PendulumEnv(gym.Env):
             y = utils.verify_number_and_cast(y)
             high = np.array([x, y])
         low = -high  # We enforce symmetric limits.
-        self.state = self.np_random.uniform(low=low, high=high)
+        self.thetas = self.np_random.uniform(low=low, high=high)
         self.last_u = None
 
         if self.render_mode == "human":
             self.render()
-        return self._get_obs(), {}
+
+        self.state = self._get_obs()
 
     def _get_obs(self):
-        theta, thetadot = self.state
+        theta, thetadot = self.thetas
         return np.array([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
 
     def render(self):
@@ -202,7 +212,7 @@ class PendulumEnv(gym.Env):
         coords = [(l, b), (l, t), (r, t), (r, b)]
         transformed_coords = []
         for c in coords:
-            c = pygame.math.Vector2(c).rotate_rad(self.state[0] + np.pi / 2)
+            c = pygame.math.Vector2(c).rotate_rad(self.thetas[0] + np.pi / 2)
             c = (c[0] + offset, c[1] + offset)
             transformed_coords.append(c)
         gfxdraw.aapolygon(self.surf, transformed_coords, (204, 77, 77))
@@ -214,7 +224,7 @@ class PendulumEnv(gym.Env):
         )
 
         rod_end = (rod_length, 0)
-        rod_end = pygame.math.Vector2(rod_end).rotate_rad(self.state[0] + np.pi / 2)
+        rod_end = pygame.math.Vector2(rod_end).rotate_rad(self.thetas[0] + np.pi / 2)
         rod_end = (int(rod_end[0] + offset), int(rod_end[1] + offset))
         gfxdraw.aacircle(
             self.surf, rod_end[0], rod_end[1], int(rod_width / 2), (204, 77, 77)

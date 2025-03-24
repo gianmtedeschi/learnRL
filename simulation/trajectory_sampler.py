@@ -145,7 +145,7 @@ class TrajectorySampler:
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action
-            state, rew, done, _ = self.env.step(action=a)
+            state, rew, done, _ = self.env.step(a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew

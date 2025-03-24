@@ -145,6 +145,8 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             self.steps_beyond_terminated += 1
             reward = 0.0
 
+        reward = -(theta^2 + 0.1 * theta_dot^2 + 0.001 * thetaacc^2)
+
         if self.render_mode == "human":
             self.render()
         
@@ -158,13 +160,13 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
     ):
         # initial dritto [0, 0, 0, 0]
 
-        # np.random.seed(seed)
-        # if initial is None:
-        #     self.state = np.array(self.np_random.uniform(low=-0.3, high=0.3, size=(4,)))
-        # else:
-        #     self.state = initial
+        np.random.seed(seed)
+        if initial is None:
+            self.state = np.array(self.np_random.uniform(low=-0.3, high=0.3, size=(4,)))
+        else:
+            self.state = initial
 
-        self.state= np.array([0, 0, 3.14, 0])
+        # self.state= np.array([0, 0, 3.14, 0])
         self.steps_beyond_done = None
        
         return np.ravel(self.state)
