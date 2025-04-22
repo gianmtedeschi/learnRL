@@ -3,178 +3,90 @@ Classic cart-pole system implemented by Rich Sutton et al.
 Copied from http://incompleteideas.net/sutton/book/code/pole.c
 permalink: https://perma.cc/C9ZM-652R
 """
-
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
+
 import numpy as np
-import gymnasium as gym
-from gymnasium import logger, spaces
-from gymnasium.envs.classic_control import utils
-from gymnasium.error import DependencyNotInstalled
-import envs # for registration
-import logging
-import math
-from gymnasium import spaces
-from gymnasium.utils import seeding
 
-logger = logging.getLogger(__name__)
-
-class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
+import gym
+from gym import logger, spaces
+from gym.envs.classic_control import utils
+from gym.error import DependencyNotInstalled
 
 
+class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "render_fps": 50,
     }
 
-    def __init__(
-        self, sutton_barto_reward: bool = False, 
-        render_mode: Optional[str] = None,
-        external_force_probability: float = 0.0,  # mixture parameter
-        # Gaussian distribution parameters:
-        external_force_mean: float = .0, # mean value of the external force
-        external_force_std: float = .0, # std deviation, namely "maximum" force magnitude under gaussian noise
-        # Beta distribution parameters:
-        external_force_alpha: float = .3,
-        external_force_beta: float = .3,
-        external_force_mag : float = 2.0, # Force magnitude when sampling from beta, catastrophic event
-        horizon = 500,
-        gamma = 1,
-        force_mag = 10.0,
-        mu_p = 0.01,
-    ):
-        self.horizon = horizon
-        self.gamma = gamma
-
-        self._sutton_barto_reward = sutton_barto_reward
-
+    def __init__(self, horizon=500, gamma=1, mu_p=0, render_mode: Optional[str] = None):
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
         self.length = 0.5  # actually half the pole's length
         self.polemass_length = self.masspole * self.length
-        self.force_mag = force_mag
-        self.mu_p = mu_p  # fixed friction coefficient
+        self.force_mag = 10.0
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = "euler"
 
         # Angle at which to fail the episode
-        # maybe we would need to modify this
-        self.theta_threshold_radians = 24 * 2 * math.pi / 360
-        self.x_threshold = 4.4
+        self.theta_threshold_radians = 12 * 2 * math.pi / 360
+        self.x_threshold = 2.4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
         # is still within bounds.
         high = np.array(
             [
                 self.x_threshold * 2,
-                np.inf,
+                np.finfo(np.float32).max,
                 self.theta_threshold_radians * 2,
-                np.inf,
+                np.finfo(np.float32).max,
             ],
             dtype=np.float32,
         )
 
-        # external force parameters
-        self.external_force_probability = external_force_probability
-        # gaussian params init
-        self.external_force_mean = external_force_mean
-        self.external_force_std = external_force_std
-        # beta params init
-        self.external_force_alpha = external_force_alpha
-        self.external_force_beta = external_force_beta
-        self.external_force_mag = external_force_mag
-
-        
-        # discrete action space
         # self.action_space = spaces.Discrete(2)
-        # continuous action space
         self.action_space = spaces.Box(low=-self.force_mag, high=self.force_mag, shape=(1,), dtype=float)
         self.observation_space = spaces.Box(-high, high, dtype=np.float32)
 
+        self.horizon = horizon
+        self.gamma = gamma
+        self.action_dim = self.action_space.shape[0]
         self.state_dim = self.observation_space.shape[0]
-        self.action_dim = self.action_space.shape[0]   
+        self.render_mode = render_mode
 
-        self.render_mode =  render_mode
-
-        self.screen_width = 1200
+        # friction
+        self.mu_p = mu_p
+        
+        self.screen_width = 600
         self.screen_height = 400
         self.screen = None
         self.clock = None
         self.isopen = True
-        self.state: np.ndarray | None = None
+        self.state = None
 
         self.steps_beyond_terminated = None
 
     def step(self, action):
-        # check for discrete action spaces
-        # assert self.action_space.contains(
-        #     action
-        # ), f"{action!r} ({type(action)}) invalid"
-        
-        # check valid action continuous
-        action = np.ravel(action)
-        assert self.action_space.contains(action), type(action)
-
+        err_msg = f"{action!r} ({type(action)}) invalid"
+        assert self.action_space.contains(action), err_msg
         assert self.state is not None, "Call reset before using step method."
         x, x_dot, theta, theta_dot = self.state
-    
-
-        # input saturation
+        
+        # force = self.force_mag if action == 1 else -self.force_mag
         force = np.clip(action, -self.force_mag, self.force_mag)
         
-        # discrete action space 
-        # force = self.force_mag if action == 1 else -self.force_mag
-        
-        costheta = np.cos(theta)
-        sintheta = np.sin(theta)
+        costheta = math.cos(theta)
+        sintheta = math.sin(theta)
 
-        # FRICTION
-        
-        # Increasing friction with theta
-        # mu_p = 0.01 + 0.09 * (1 - np.exp(-((theta / self.theta_threshold_radians)**2 * 20))) / (1 - np.exp(-20))
-        
-        # No friction
-        # mu_p = 0.01 # const friction, minimum
-        
-        # For the interested reader:
-        # https://coneural.org/florian/papers/05_cart_pole.pdf
         temp = (
-            force + self.polemass_length * np.square(theta_dot) * sintheta
+            force + self.polemass_length * theta_dot**2 * sintheta
         ) / self.total_mass
-        
-        # Stochastic External Tip Force Injection
-        # Ignore true clause for now
-        if bool(theta < self.theta_threshold_radians or theta > (2 * np.pi - self.theta_threshold_radians)):
-            if self.np_random.random() >= self.external_force_probability:
-                # sample disturbance from a gaussian distribution 
-                F_tip = self.np_random.normal(self.external_force_mean, self.external_force_std)
-            else:
-                # sample disturbance from the Beta
-                print("disturbance!")
-                """
-                TO-DO: signal when the beta is sampled during evaluation for feedback.
-                - render the environment only when the beta is sampled to check behaviour of the agent.
-                """
-                beta_sample = self.np_random.beta(self.external_force_alpha,self.external_force_beta)
-                external_force_min = -self.external_force_mag
-                external_force_max = self.external_force_mag
-                F_tip = external_force_min+beta_sample*(external_force_max-external_force_min)
-            
-            # compute modified angular acceleration
-            extra_term = (2*F_tip)/self.masspole
-            thetaacc = (self.gravity * sintheta - costheta * temp - (self.mu_p*theta_dot/self.polemass_length)+extra_term) / (
-                self.length
-                * (4.0 / 3.0 - self.masspole * np.square(costheta) / self.total_mass)
-            )
-        # Focus here
-        else:
-            thetaacc = (self.gravity * sintheta - costheta * temp - (self.mu_p*theta_dot/self.polemass_length)) / (
-                self.length
-                * (4.0 / 3.0 - self.masspole * np.square(costheta) / self.total_mass)
-                )
-        
+        thetaacc = ((self.gravity * sintheta - costheta * temp) - (self.mu_p*theta_dot/self.polemass_length)) / (
+            self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
+        )
         xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
 
         if self.kinematics_integrator == "euler":
@@ -188,87 +100,94 @@ class NsCartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
 
-        # Wrap theta to [0, 2*pi]
-        # Fix here
-        theta = theta % (2 * np.pi)
-        
+        # theta = theta % (2 * np.pi)        
+        # no discontinuity in theta
+        theta = (theta + np.pi) % (2 * np.pi) - np.pi
+
         # update the state after integration
-        self.state = np.array((x, x_dot.item(), theta, theta_dot.item()), dtype=np.float64)
+        self.state = np.array((x, x_dot[0], theta, theta_dot[0]), dtype=np.float64)
+
+        # swing up logic
+        pole_up = bool(
+            theta < -self.theta_threshold_radians
+            or theta > self.theta_threshold_radians
+        )
 
         terminated = bool(
             x < -self.x_threshold
             or x > self.x_threshold
         )
-        termination_penalty = 0.0
-        if terminated:
-            termination_penalty = 100.0  # or some value tuned via experiments
+        
+        # add termination penalty if goes out of bounds
+        # termination_penalty = 0.0
+        # if terminated:
+        #     termination_penalty = 100.0  # or some value tuned via experiments
 
-        # the reward for the environment - negative to encode notion of cost
         reward = np.cos(theta.item())
         
-        reward -=  0.001 *( theta_dot.item()**2) + 0.001*(x_dot.item()**2)+0.001*(x.item()**2)
-        reward -= termination_penalty # extra penalty for going out of bounds
-        # add termination penalty if goes out of bounds
-        # if self.render_mode == "human":
-        #     self.render()
+        if pole_up:
+            reward += 1.0
 
-        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
-        return np.array(self.state, dtype=np.float32), reward, terminated, False
+        if not terminated:
+            reward += 0
+        elif self.steps_beyond_terminated is None:
+            # Pole just fell!
+            self.steps_beyond_terminated = 0
+            reward += 0
+        else:
+            if self.steps_beyond_terminated == 0:
+                logger.warn(
+                    "You are calling 'step()' even though this "
+                    "environment has already returned terminated = True. You "
+                    "should always call 'reset()' once you receive 'terminated = "
+                    "True' -- any further steps are undefined behavior."
+                )
+            self.steps_beyond_terminated += 1
+            reward = 0.0
+
+        reward = -(theta**2 + 0.1 * theta_dot**2 + 0.001 * thetaacc**2)
+
+        if self.render_mode == "human":
+            self.render()
+        
+        self.state = np.array(self.state, dtype=np.float32)
+        return np.ravel(self.state), reward, terminated, False
 
     def reset(
         self,
-        *,
-        seed: Optional[int] = None,
-        options: Optional[dict] = None,
+        seed= None,
+        initial= None,
     ):
-        super().reset(seed=seed) # reset the random seed of the environment
-        
-        # Note that if you use custom reset bounds, it may lead to out-of-bound
-        # state/observations.
-        if options is not None and "x0" in options:
-            assert (
-                isinstance(options["x0"], np.ndarray)
-                and options["x0"].shape == (4,)
-            ), "Invalid state object"
-            self.state = options["x0"]
-            self.steps_beyond_terminated = None # reset the terminated boolean
+        # initial dritto [0, 0, 0, 0]
 
-        else: # default init on the vertical position
-            # self.render_mode = None
-            # low, high = utils.maybe_parse_reset_bounds(
-            #     options, -0.0001, 0.0001  # default low
-            # )  # default high
-            # self.state = self.np_random.uniform(low=low, high=high, size=(4,))
-            # self.steps_beyond_terminated = None
+        np.random.seed(seed)
+        if initial is None:
+            self.state = np.array(self.np_random.uniform(low=-0.3, high=0.3, size=(4,)))
+        else:
+            self.state = initial
 
-            x = 0.0
-            x_dot = 0.0
-            theta = 0.0 + self.np_random.uniform(-0.001, 0.001)  # near vertical
-            theta_dot = 0.0
-            self.state = np.array([x, x_dot, theta, theta_dot], dtype=np.float64)
-            self.steps_beyond_terminated = None
+        # self.state= np.array([0, 0, 3.14, 0])
+        self.steps_beyond_done = None
+       
+        return np.ravel(self.state)
 
-        # if self.render_mode == "human":
-        #    self.render()
-        return np.array(self.state, dtype=np.float32), {}
 
     def render(self):
         if self.render_mode is None:
-            assert self.spec is not None
             gym.logger.warn(
                 "You are calling render method without specifying any render mode. "
                 "You can specify the render_mode at initialization, "
-                f'e.g. gym.make("{self.spec.id}", render_mode="rgb_array")'
+                f'e.g. gym("{self.spec.id}", render_mode="rgb_array")'
             )
             return
 
         try:
             import pygame
             from pygame import gfxdraw
-        except ImportError as e:
+        except ImportError:
             raise DependencyNotInstalled(
-                'pygame is not installed, run `pip install "gymnasium[classic-control]"`'
-            ) from e
+                "pygame is not installed, run `pip install gym[classic_control]`"
+            )
 
         if self.screen is None:
             pygame.init()

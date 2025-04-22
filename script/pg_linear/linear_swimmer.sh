@@ -1,0 +1,1 @@
+python3 /Users/gianmarcotedeschi/Projects/learnRL/run_olop.py --dir /Users/gianmarcotedeschi/Projects/learnRL/results/ --ite 1000 --pol linear_gaussian --env swimmer --horizon 200 --gamma 0.995 --lr 1e-2 --lr_strategy adam --batch 100 --clip 1 --n_trial 5 --n_jobs 10

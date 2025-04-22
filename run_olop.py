@@ -193,7 +193,8 @@ for i in range(args.n_trials):
     
     if args.clip:
         dir_name += "clip_"
-    else:       dir_name += "noclip_"
+    else:       
+        dir_name += "noclip_"
 
     if args.env == "lq":
         dir_name += f"dS_{args.lq_state_dim}_dA_{args.lq_action_dim}_"
@@ -266,7 +267,8 @@ for i in range(args.n_trials):
     if args.pol == "linear_gaussian":
         tot_params = s_dim * a_dim
         pol = GaussianPolicy(
-            parameters=np.ones(tot_params),
+            # parameters=np.ones(tot_params),
+            parameters=np.random.normal(0, 1, tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
             std_dev=args.std,

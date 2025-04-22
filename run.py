@@ -178,11 +178,11 @@ for i in range(args.n_trials):
 
     if args.env == "swimmer":
         env_class = Swimmer
-        env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        env = Swimmer(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "half_cheetah":
         env_class = HalfCheetah
-        env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "ant":
         env_class = Ant

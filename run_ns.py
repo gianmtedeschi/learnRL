@@ -53,7 +53,7 @@ parser.add_argument(
     default="pendulum",
     choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car", 
              "river", "cartpole", "hopper", "walker", "inverted_pendulum",
-             "reacher", "pendulum", "dam", "ns_cartpole", "ns_cartpole_2"]
+             "reacher", "pendulum", "dam", "ns_cartpole"]
 )
 parser.add_argument(
     "--horizon",
@@ -133,7 +133,7 @@ parser.add_argument(
 parser.add_argument(
     "--animate",
     help="Render the agent",
-    default=True,
+    default=False,
     action='store_true'
 )
 parser.add_argument(
@@ -223,10 +223,6 @@ for i in range(args.n_trials):
         env = Ant(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "ns_cartpole":
-        env_class = NsCartPoleEnv
-        env = NsCartPoleEnv(horizon=args.horizon, gamma=args.gamma, force_mag=args.force, mu_p=args.friction)
-        MULTI_LINEAR = True
-    elif args.env == "ns_cartpole_2":
         env_class = CartPoleEnv
         env = CartPoleEnv(horizon=args.horizon, gamma=args.gamma, mu_p=args.friction)
         MULTI_LINEAR = True

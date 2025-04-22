@@ -27,7 +27,7 @@ class HalfCheetah(MujocoBase):
             clip=clip
         )
         self.gym_env = gym.make(
-            'HalfCheetah-v5',
+            'HalfCheetah-v4',
             forward_reward_weight=forward_reward_weight,
             ctrl_cost_weight=ctrl_cost_weight,
             reset_noise_scale=reset_noise_scale,
