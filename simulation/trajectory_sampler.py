@@ -77,11 +77,46 @@ def pg_sampling_worker(
     
     return res
 
+def pg_sampling_worker_bpo(
+        env: BaseEnv = None,
+        pol: BasePolicy = None,
+        pol_b : BasePolicy = None,
+        dp: BaseProcessor = None,
+        params: np.ndarray = None,
+        params_b: np.ndarray = None,
+        starting_state: np.ndarray = None,
+        seed: int = 0
+) -> list:
+    """Worker collecting a single trajectory.
+
+    Args:
+        env (BaseEnv, optional): the env to employ. Defaults to None.
+        
+        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        
+        dp (Baseprocessor, optional): the data processor to employ. 
+        Defaults to None.
+        
+        params (np.array, optional): the parameters to plug into the policy. 
+        Defaults to None.
+        
+        starting_state (np.array, optional): the state to which the env should 
+        be initialized. Defaults to None.
+
+    Returns:
+        list: [performance, reward, scores]
+    """
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, pol_b = pol_b, data_processor=dp)
+    res = trajectory_sampler.collect_trajectory_forBPO(params_target = params, params_behavioural = params_b, starting_state=starting_state, seed=seed)
+    
+    return res
+
 # sampler class for action-based methods
 class TrajectorySampler:
     def __init__(
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
+            pol_b: BasePolicy = None,
             data_processor: BaseProcessor = None
     ) -> None:
         err_msg = "[PGTrajectorySampler] no environment provided!"
@@ -95,6 +130,8 @@ class TrajectorySampler:
         err_msg = "[PGTrajectorySampler] no data_processor provided!"
         assert data_processor is not None, err_msg
         self.dp = data_processor
+        
+        self.pol_b = pol_b
 
         return
 
@@ -165,6 +202,93 @@ class TrajectorySampler:
             return [perf, rewards, scores, states]
         else:  
             return [perf, rewards, scores]
+        
+    def collect_trajectory_forBPO(
+            self, params_target: np.array = None,
+            starting_state=None, split=False, seed=0,
+            params_behavioural: np.array = None
+            
+    ) -> list:
+        """
+        Summary:
+            Function collecting a trajectory reward for a particular theta
+            configuration.
+        Args:
+            params (np.array): the current sampling of theta values
+            starting_state (any): teh starting state for the iterations
+        Returns:
+            list of:
+                float: the discounted reward of the trajectory
+                np.array: vector of all the rewards
+                np.array: vector of all the scores
+        """
+        # reset the environment
+        self.env.reset(seed=seed)
+        if starting_state is not None:
+            self.env.state = copy.deepcopy(starting_state)
+
+        # initialize parameters
+        np.random.seed(seed)
+        perf = 0
+        rewards = np.zeros(self.env.horizon, dtype=np.float64)
+        if split:
+            scores = np.zeros((self.env.horizon, len(self.pol.history.get_all_leaves()), self.pol.tot_params), dtype=np.float64)
+        else:
+            scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+
+        states = np.zeros((self.env.horizon, self.env.state_dim), dtype=np.float64)
+        actions = np.zeros((self.env.horizon, self.env.action_dim), dtype= np.float64)
+        logprobs_t = np.zeros(self.env.horizon, dtype = np.float64)
+        logprobs_b = np.zeros(self.env.horizon, dtype = np.float64)
+        if params_target is not None:
+            self.pol.set_parameters(thetas=copy.deepcopy(params_target))
+        if params_behavioural is not None:
+            self.pol_b.set_parameters(thetas = copy.deepcopy(params_behavioural))
+
+        # act
+        for t in range(self.env.horizon):
+            # retrieve the state
+            state = self.env.state
+
+            # transform the state
+            features = self.dp.transform(state=state)
+
+            # select the action
+            a = self.pol_b.draw_action(state=features)
+            score = self.pol_b.compute_score(state=features, action=a)
+            
+            logprob_t = self.pol.compute_logprob(features, a)
+            logprob_b = self.pol_b.compute_logprob(features, a)
+
+            # play the action
+            state, rew, done, _ = self.env.step(a)
+
+            # update the performance index
+            perf += (self.env.gamma ** t) * rew
+
+            # update the vectors of rewards scores and state
+            rewards[t] = rew
+            scores[t, :] = score
+            states[t, :] = state
+            actions[t,:] = a
+            logprobs_t[t] = logprob_t
+            logprobs_b[t] = logprob_b
+
+            if done:
+                if t < self.env.horizon - 1:
+                    rewards[t+1:] = 0
+                    scores[t+1:] = 0
+                    logprobs_t[t+1:] = 0
+                    logprobs_b[t+1:] = 0
+                    # dovrei gestire le logprob in qualche moddo, tipo -inf ? però poi quando li sommo è un problema, ha più senso 0
+                    
+                break
+        
+        if split:
+            return [perf, rewards, scores, states, logprobs_t, logprobs_b]
+        else:  
+            return [perf, rewards, scores, states, logprobs_t, logprobs_b, actions]
+    
     
     def collect_trajectory_mixed_planning(
             self, params: np.array = None, starting_state=None, planning_horizon=1, persistence=False, seed=0

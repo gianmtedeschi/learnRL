@@ -3,3 +3,4 @@ from algorithms.policy_gradient import *
 from algorithms.a_gaps import *
 from algorithms.p_gaps import *
 from algorithms.open_planning import *
+from algorithms.policy_gradient_bpo import *

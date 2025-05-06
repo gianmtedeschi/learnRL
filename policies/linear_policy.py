@@ -58,3 +58,6 @@ class LinearPolicy(BasePolicy, ABC):
         if self.multi_linear:
             state = np.tile(state, self.dim_action)
         return state
+    
+    def compute_logprob(self, state, action):
+        raise NotImplementedError("compute_logprob not impelmented for this policy")

@@ -96,5 +96,9 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
     
     def reduce_exploration(self):
         self.std_dev = np.clip(self.std_dev - self.std_decay, self.std_min, np.inf)
+        
+    def compute_logprob(self, state, action):
+        raise NotImplementedError("compute_logprob not impelmented for this policy")
+
 
 

@@ -26,6 +26,9 @@ class TrajectoryResults:
     RewList = 1
     ScoreList = 2
     StateList = 3
+    Logprob_target = 4
+    Logprob_behavioural = 5
+    ActionList = 6
 
 
 class ParamSamplerResults:

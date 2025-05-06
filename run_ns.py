@@ -1,7 +1,7 @@
 # Libraries
 import argparse
 import datetime
-from algorithms import PolicyGradient
+from algorithms import PolicyGradientBpo
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
@@ -342,7 +342,7 @@ for i in range(args.n_trials):
         n_jobs = args.n_jobs,
         seed=i
     )
-    alg = PolicyGradient(**alg_parameters)
+    alg = PolicyGradientBpo(**alg_parameters)
     
 
     print(text2art(f"==  PG TEST on {args.env} =="))

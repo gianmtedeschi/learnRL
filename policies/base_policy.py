@@ -26,3 +26,7 @@ class BasePolicy(ABC):
     @abstractmethod
     def reduce_exploration(self):
         pass
+    
+    @abstractmethod
+    def compute_logprob(self, state, action):
+        pass

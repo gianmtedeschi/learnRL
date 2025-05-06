@@ -126,6 +126,10 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
     def compute_score(self, state, action) -> np.array:
         return np.zeros(self.tot_params)
     
+    def compute_logprob(self, state, action):
+        raise NotImplementedError("compute_logprob not impelmented for this policy")
+
+    
 
 
 class DeepGaussianPolicy(NeuralNetworkPolicy):
@@ -207,3 +211,110 @@ class DeepGaussianPolicy(NeuralNetworkPolicy):
             dtype=np.float64
         )
         return action.ravel()
+    
+    def compute_logprob(self, state, action):
+        #if state.ndim == 2:
+            #state = state.ravel()
+        state_tensor = torch.tensor(np.array(state, dtype=np.float64)).unsqueeze(0)
+        action_tensor = torch.tensor(np.array(action, dtype=np.float64)).unsqueeze(0)
+        
+        sigma_tensor = torch.tensor(self.std_dev, dtype=torch.float64)
+        
+        action_mean = self.net.forward(state_tensor)
+        
+        log_prob = -0.5 * (((action_tensor - action_mean) / sigma_tensor) ** 2).sum() - 0.5 * torch.log(torch.sqrt(2 * torch.pi * sigma_tensor ** 2)) * action_tensor.size(0)
+
+        return log_prob
+    
+    
+    def compute_logprob_batch(self, states, actions):
+        
+        """
+        Computes log-probabilities for batched trajectories under a diagonal Gaussian policy.
+
+        Args:
+            states: Tensor of shape (batch_size, horizon, state_dim)
+            actions: Tensor of shape (batch_size, horizon, action_dim)
+
+        Returns:
+            log_probs: Tensor of shape (batch_size, horizon), one per timestep per sample
+        """
+        if not torch.is_tensor(states):
+            states = torch.as_tensor(states, dtype=torch.float64)
+        if not torch.is_tensor(actions):
+            actions = torch.as_tensor(actions, dtype=torch.float64)
+
+        B, H, D = states.shape
+        A = actions.shape[-1]
+
+        # Flatten batch and time dimensions to feed into the network
+        states_flat = states.view(B * H, D)
+
+        # Get action mean from policy network
+        action_mean = self.net.forward(states_flat)  # shape: (B*H, action_dim)
+
+        # Get std (broadcastable shape)
+        std = torch.as_tensor(self.std_dev, dtype=torch.float64)
+        if std.ndim == 0:
+            std = std.unsqueeze(0)  # make it 1D
+        var = std ** 2
+
+        # Flatten actions for matching
+        actions_flat = actions.view(B * H, A)
+
+        # Compute log probs
+        log_probs = -0.5 * (((actions_flat - action_mean) ** 2) / var + 2 * torch.log(std) + torch.log(torch.tensor(2 * torch.pi)))
+        log_probs = log_probs.sum(dim=1)  # shape: (B*H,)
+
+        # Reshape back to (B, H)
+        log_probs = log_probs.view(B, H)
+
+        return log_probs
+            
+
+# def compute_logprob_batch_gpu(self, states, actions):
+#     """
+#     Computes log-probabilities for batched trajectories under a diagonal Gaussian policy.
+
+#     Args:
+#         states: Tensor of shape (batch_size, horizon, state_dim)
+#         actions: Tensor of shape (batch_size, horizon, action_dim)
+
+#     Returns:
+#         log_probs: Tensor of shape (batch_size, horizon), one per timestep per sample
+#     """
+#     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+#     if not torch.is_tensor(states):
+#         states = torch.as_tensor(states, dtype=torch.float32)
+#     if not torch.is_tensor(actions):
+#         actions = torch.as_tensor(actions, dtype=torch.float32)
+
+#     states = states.to(device)
+#     actions = actions.to(device)
+
+#     B, H, D = states.shape
+#     A = actions.shape[-1]
+
+#     # Flatten batch and time dimensions
+#     states_flat = states.view(B * H, D)
+
+#     # Predict mean action from network
+#     action_mean = self.net.forward(states_flat)  # shape: (B*H, A)
+
+#     # Get std dev tensor on the same device
+#     std = torch.as_tensor(self.std_dev, dtype=torch.float32, device=device)
+#     if std.ndim == 0:
+#         std = std.unsqueeze(0)
+#     var = std ** 2
+
+#     actions_flat = actions.view(B * H, A)
+
+#     # Compute log-probabilities
+#     log_probs = -0.5 * (((actions_flat - action_mean) ** 2) / var + 2 * torch.log(std) + torch.log(torch.tensor(2 * torch.pi, device=device)))
+#     log_probs = log_probs.sum(dim=1)  # (B*H,)
+
+#     # Reshape to (B, H)
+#     log_probs = log_probs.view(B, H)
+
+#     return log_probs
