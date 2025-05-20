@@ -48,7 +48,8 @@ class PolicyGradientBpo:
             n_jobs: int = 1,
             debug: bool = False,
             seed = 0,
-            #defensive_batch_size = 0
+            defensive_batch_size = 0,
+            evaluation_batch_size = 100
             # numero behavioural policies, o lista batches tipo [100,100,100] per trovare behavioural
             #se riusare le behavioural policies vecchie, e fino a che numero k ( default 1 )
             # defensive batch
@@ -104,8 +105,8 @@ class PolicyGradientBpo:
         self.parallel_sampling = bool(self.n_jobs != 1)
         self.debug = debug
         self.seed = seed
-        #self.defensive_batchsize = defensive_batch_size
-
+        self.defensive_batchsize = defensive_batch_size
+        self.evaluation_batch_size = evaluation_batch_size
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
         self.theta_behavioural_history = np.zeros((self.ite, self.dim), dtype = np.float64)
@@ -149,11 +150,12 @@ class PolicyGradientBpo:
                 delayed_functions = delayed(pg_sampling_worker)
 
                 # parallel computation
-                res = Parallel(n_jobs=self.n_jobs)(delayed_functions(**worker_dict_eval, seed=self.seed+j+i*self.batch_size) for j in range(self.batch_size))
-                perf_vector = np.zeros(self.batch_size, dtype=np.float64)
-                for j in range(self.batch_size):
+                res = Parallel(n_jobs=self.n_jobs)(delayed_functions(**worker_dict_eval, seed=self.seed+j+i*self.evaluation_batch_size) for j in range(self.evaluation_batch_size))
+                perf_vector = np.zeros(self.evaluation_batch_size, dtype=np.float64)
+                for j in range(self.evaluation_batch_size):
                     perf_vector[j] = res[j][TrajectoryResults.PERF]
-                    
+                
+                #print(f"perf_vector: {perf_vector}")
                 self.performance_idx[i] = np.mean(perf_vector)
                 # Update best rho
                 self.update_best_theta(current_perf=self.performance_idx[i])
@@ -211,7 +213,7 @@ class PolicyGradientBpo:
                 actions[j,:,:] = res[j][TrajectoryResults.ActionList]
                 
                 if self.estimator_type == "REINFORCE":
-                    norm_vector[j] == np.linalg.norm (perf_vector[j] * np.sum(score_vector[j,:,:], axis=0)) # controllare giuste le dimensioni
+                    norm_vector[j] = np.linalg.norm (perf_vector[j] * np.sum(score_vector[j,:,:], axis=0)) # controllare giuste le dimensioni
                 elif self.estimator_type == "GPOMDP":
                     discounted_rewards = reward_vector[j, :] * (self.env.gamma ** np.arange(self.env.horizon))  # shape (T,)
                     cumulative_scores = np.cumsum(score_vector[j, :, :], axis=0)  # shape (T, D)
@@ -220,22 +222,37 @@ class PolicyGradientBpo:
             # questi risultati li uso per calcolare usnado gpomdp il vettor gradient_norm_vec dim = batchsize, calcola in performance gamma è già contata
             # dovrebbe essere sum((reward_vec * gamma^t)  * cumsum(score))
             
+            #print(f"weights t: {logprobs_vector_t}")
+            #print(f"weights : {logprobs_vector_b}")
             
             
-            weights_log  = logprobs_vector_t - logprobs_vector_b
-            weights_trajectories_log = np.sum(weights_log, axis = 1)
-            weights_trajectories = np.exp(weights_trajectories_log)
+            #weights_log  = np.log(np.exp(logprobs_vector_t)) - np.log(np.exp(logprobs_vector_b))
+            #weights_trajectories_log = np.sum(weights_log, axis = 1)
+            #weights_trajectories = np.exp(weights_trajectories_log)
+            
+            logprobs_t_sum = np.sum(logprobs_vector_t, axis = 1)
+            logprobs_b_sum = np.sum(logprobs_vector_b, axis = 1)
+            weights_trajectories = np.exp(logprobs_t_sum - logprobs_b_sum)
                 
             #print(f"weights_trajectories: {weights_trajectories}")
             #print(f"norm_vector: {norm_vector}")
+            #print(f"beh pol paramters : {self.policy_behavioural.get_parameters()}")
+            coefficients = weights_trajectories * norm_vector #+ 1e-10
+            # if self.baselines == "avg":
+            #     b = np.mean(coefficients)
+            # elif self.baselines == "peters":
+            #     raise NotImplementedError
+            #     b = np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=0) / np.sum(rolling_scores ** 2, axis=0)
+            # else:
+            #     b = np.zeros(1)
+            #coefficients = coefficients - b
             
-            coefficients = weights_trajectories * norm_vector
             #print(f"coefficents for behavioural policy optimization {coefficients}")
             coefficients = torch.as_tensor(coefficients, dtype = torch.float64)
             
             
             
-            loss = lambda coefficients, logps: - torch.mean(coefficients * torch.sum(logps, axis = 1))
+            loss = lambda coefficients, logps: - torch.mean(coefficients * torch.sum(logps, axis = 1), axis = 0)
 
 
             # device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -247,13 +264,19 @@ class PolicyGradientBpo:
             #initialize behavioural policy with target policy
             self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas))    
                   
-            max_iter = 100
-            tol = 1e-5
-            optimizer = optim.Adam(self.policy_behavioural.net.parameters(), lr=1e-2)
+            max_iter = 500
+            tol = 1000
+            optimizer = optim.Adam(self.policy_behavioural.net.parameters(), lr=1e-4)
+            
+            # Set deterministic behavior for optimizer
+            #torch.manual_seed(self.seed)
+    
             
             for it in range(max_iter):
                 optimizer.zero_grad()
-                loss_val = loss(coefficients, self.policy_behavioural.compute_logprob_batch(states, actions))
+                #logprobs = torch.as_tensor([self.policy_behavioural.compute_logprob(state_, action_) for state_, action_ in zip(states, actions)])
+                logprobs = self.policy_behavioural.compute_logprob_batch(states, actions)
+                loss_val = loss(coefficients, logprobs)
                 loss_val.backward()
                 grad_norm = sum(p.grad.norm().item() for p in self.policy_behavioural.net.parameters() if p.grad is not None)
 
@@ -280,12 +303,23 @@ class PolicyGradientBpo:
                         params_b = copy.deepcopy(self.thetas_behavioural)
                         # seed=self.seed
                     )
+                    
+                    worker_dict_defensive = dict(
+                        env = copy.deepcopy(self.env),
+                        pol =copy.deepcopy(self.policy_behavioural), 
+                        pol_b=copy.deepcopy(self.policy), # sono scambiati a posta perché voglio samplare dalla target
+                        dp=copy.deepcopy(self.data_processor),
+                        params = copy.deepcopy(self.thetas_behavioural),
+                        params_b = copy.deepcopy(self.thetas) 
+                    )
 
                     # build the parallel functions
                     delayed_functions = delayed(pg_sampling_worker_bpo)
+                    delayed_functions_defensive = delayed(pg_sampling_worker_bpo)
 
                     # parallel computation
                     res = Parallel(n_jobs=self.n_jobs)(delayed_functions(**worker_dict, seed=self.seed+j+i*self.batch_size) for j in range(self.batch_size))
+                    res_d = Parallel(n_jobs=self.n_jobs)(delayed_functions_defensive(**worker_dict_defensive, seed=self.seed+j+i*self.defensive_batchsize) for j in range(self.batch_size,self.batch_size + self.defensive_batchsize))
             else:
                 raise NotImplementedError
                 res = []
@@ -301,6 +335,13 @@ class PolicyGradientBpo:
             logprobs_vector_t = np.zeros((self.batch_size, self.env.horizon), dtype = np.float64)
             logprobs_vector_b = np.zeros((self.batch_size, self.env.horizon),  dtype = np.float64)
             
+            perf_vector_d = np.zeros(self.defensive_batchsize, dtype=np.float64)
+            score_vector_d = np.zeros((self.defensive_batchsize, self.env.horizon, self.dim),
+                                    dtype=np.float64)
+            reward_vector_d = np.zeros((self.defensive_batchsize, self.env.horizon), dtype=np.float64)
+            logprobs_vector_t_d = np.zeros((self.defensive_batchsize, self.env.horizon), dtype = np.float64)
+            logprobs_vector_b_d= np.zeros((self.defensive_batchsize, self.env.horizon),  dtype = np.float64)
+            
             
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
@@ -309,21 +350,56 @@ class PolicyGradientBpo:
                 logprobs_vector_t[j, :] = res[j][TrajectoryResults.Logprob_target]
                 logprobs_vector_b[j, :] = res[j][TrajectoryResults.Logprob_behavioural]
                 
+            for j in range(self.defensive_batchsize):
+                perf_vector_d[j] = res_d[j][TrajectoryResults.PERF]
+                reward_vector_d[j, :] = res_d[j][TrajectoryResults.RewList]
+                score_vector_d[j, :, :] = res_d[j][TrajectoryResults.ScoreList]
+                logprobs_vector_t_d[j, :] = res_d[j][TrajectoryResults.Logprob_behavioural] # sono scambiati a posta perché voglio samplare dalla target
+                logprobs_vector_b_d[j, :] = res_d[j][TrajectoryResults.Logprob_target]
                 
+            perf_vector = np.concatenate((perf_vector, perf_vector_d), axis = 0)
+            reward_vector = np.concatenate((reward_vector, reward_vector_d), axis = 0)
+            score_vector = np.concatenate((score_vector, score_vector_d), axis = 0)
             
+            alpha1 = self.defensive_batchsize / (self.batch_size + self.defensive_batchsize)
+            alpha2 = self.batch_size / (self.batch_size + self.defensive_batchsize)
+            
+            logprobs_t_sum = np.sum(logprobs_vector_t, axis = 1)
+            logprobs_t_cumsum = np.cumsum(logprobs_vector_t, axis = 1)
+            #logprobs_b_sum = np.sum(logprobs_vector_b, axis = 1)
+            #logprobs_b_cumsum = np.cumsum(logprobs_vector_b, axis = 1)
+            
+            logprobs_t_d_sum = np.sum(logprobs_vector_t_d, axis = 1)
+            logprobs_t_d_cumsum = np.cumsum(logprobs_vector_t_d, axis = 1)
+            #logprobs_b_d_sum = np.sum(logprobs_vector_b_d, axis = 1)
+            #logprobs_b_d_cumsum = np.cumsum(logprobs_vector_b_d, axis = 1)
+            
+            num_sum = np.concatenate((logprobs_t_sum, logprobs_t_d_sum), axis = 0)
+            den_sum = np.sum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
+
+            num_cumsum = np.concatenate((logprobs_t_cumsum, logprobs_t_d_cumsum), axis = 0)
+            den_cumsum = np.cumsum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
+
+            '''
+            weights_log  = np.log(np.exp(logprobs_vector_t ))- np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b) )
+            weights_log_d = np.log(np.exp(logprobs_vector_t_d ))- np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))
+            weights_log = np.concatenate((weights_log, weights_log_d), axis = 0)
+            '''
+            
+            #print(f"weights log after concatenation {weights_log}")
             # Compute the estimated gradient
-            weights_log  = logprobs_vector_t - logprobs_vector_b
+            #weights_log  = logprobs_vector_t - logprobs_vector_b
             #print(f"weights log : {weights_log}")
             
             if self.estimator_type == "REINFORCE":
-                weights_trajectories_log = np.sum(weights_log, axis = 1)
+                weights_trajectories_log = num_sum - den_sum
                 weights_trajectories = np.exp(weights_trajectories_log)
                 self.estimated_gradient = np.mean(
                     perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1) * weights_trajectories[:, np.newaxis], axis=0)
             elif self.estimator_type == "GPOMDP":
-                
+                rolling_weights_log = num_cumsum - den_cumsum
                 self.estimated_gradient = self.update_gpomdp_bpo(
-                    reward_vector=reward_vector, score_vector=score_vector, weights_log = weights_log
+                    reward_vector=reward_vector, score_vector=score_vector, rolling_weights_log = rolling_weights_log
                 )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
@@ -390,22 +466,31 @@ class PolicyGradientBpo:
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
 
-        # print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
+        #print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
         return self.estimated_gradient
 
     def update_gpomdp_bpo(
         self, reward_vector: np.array,
         score_vector: np.array,
-        weights_log: np.array
+        rolling_weights_log: np.array
         
     ) -> np.array:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
         rolling_scores = np.cumsum(score_vector, axis=1) + 1e-10
-        rolling_weights_log = np.cumsum(weights_log, axis = 1) 
-        rolling_weights = np.exp(rolling_weights_log) + 1e-10 
-        reward_trajectory = reward_vector[..., np.newaxis] * rolling_scores * rolling_weights[..., np.newaxis]
+        rolling_weights = np.exp(rolling_weights_log) 
+        
+        stabilizers = np.max(rolling_weights_log, axis = 0)
+        
+        if self.baselines == "avg":
+            b = np.mean(reward_vector[...,None], axis=0)
+        elif self.baselines == "peters":
+            b = np.sum(rolling_scores ** 2 * reward_vector[...,None] * np.exp(2*(rolling_weights_log - stabilizers[None, ...]))[...,None], axis=0) / np.sum(rolling_scores ** 2 * np.exp(2*(rolling_weights_log - stabilizers[None,...]))[...,None] , axis=0)
+        else:
+            b = np.zeros(1)
+        
+        reward_trajectory = (reward_vector[..., np.newaxis] - b[np.newaxis,...] ) * rolling_scores * rolling_weights[..., np.newaxis]
         self.estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis]*reward_trajectory, axis = 1 ),
             axis = 0
@@ -415,6 +500,8 @@ class PolicyGradientBpo:
         # print(f"rolling_scores: {rolling_scores}")
         # print(f"weights_log: {weights_log}")
         #print(f"rolling_weighst: {rolling_weights}")
+        print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
+        print(f"estimated gradient: {self.estimated_gradient}")
         
         
         return self.estimated_gradient

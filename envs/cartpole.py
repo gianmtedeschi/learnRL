@@ -59,7 +59,7 @@ class ContCartPole(gym.Env):
         )
         self.observation_space = spaces.Box(-high, high, dtype=np.float64)
 
-        self.seed()
+        #self.seed()
         self.viewer = None
         self.state = None
 
@@ -69,7 +69,7 @@ class ContCartPole(gym.Env):
         self.axle = None
         self.poletrans = None
         self.carttrans = None
-        self.np_random = None
+        #self.np_random = None
 
         self.screen_width = 600
         self.screen_height = 400
@@ -117,15 +117,21 @@ class ContCartPole(gym.Env):
         return np.ravel(self.state), reward, done, {}
 
     def reset(self, initial=None, seed=None):
-        np.random.seed(seed)
+        #np.random.seed(seed)
+        super().reset(seed=seed)
+        if seed is not None:
+            self.seed(seed)
         if initial is None:
             self.state = np.array(self.np_random.uniform(low=-0.05, high=0.05, size=(4,)))
             self.steps_beyond_done = None
+            #print(f"[{self.state[0]}, {self.state[1]}, {self.state[2]}, {self.state[3]}],")
             return
         else:
             self.state = initial
             self.steps_beyond_done = None
             return np.ravel(self.state)
+        
+        
         '''
         if self.render_mode is None:
             #assert self.spec is not None

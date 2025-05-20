@@ -350,7 +350,7 @@ for i in range(args.n_trials):
         seed=seed,
         # defensive batchsize default
     )
-    alg = PolicyGradientBpo(**alg_parameters)
+    alg = PolicyGradient(**alg_parameters)
     
 
     print(text2art(f"==  PG TEST on {args.env} =="))
