@@ -214,10 +214,6 @@ for i in range(args.n_trials):
         env_class = Ant
         env = Ant(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
         MULTI_LINEAR = True
-    elif args.env == "walker":
-        env_class = Walker
-        env = Walker(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))
-        MULTI_LINEAR = True
     elif args.env == "hopper":
         env_class = Hopper
         env = Hopper(horizon=args.horizon, gamma=args.gamma, clip=bool(args.clip))

@@ -1,7 +1,7 @@
 # Libraries
 import argparse
 import datetime
-from algorithms import PolicyGradientBpo
+from algorithms import PolicyGradientBpo, PolicyGradient
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
