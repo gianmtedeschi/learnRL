@@ -96,6 +96,15 @@ class GaussianPolicy(BasePolicy, ABC):
             scores = np.ravel(scores)
         return scores
     
-    def compute_logprob(self, state, action):
+    def compute_logprob(self, state, action): # non è implementato multilinear
+        state = np.ravel(state)
+        action_deviation = action - (self.parameters @ state)
+        log_prob = -0.5 * (((action_deviation) / self.std_dev) ** 2) - 0.5 * np.log(np.sqrt(2 * np.pi * self.std_dev ** 2))
+        return log_prob
+
+            
+
+        return 
+            
         raise NotImplementedError("compute_logprob not impelmented for this policy")
 

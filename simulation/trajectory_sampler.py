@@ -179,6 +179,7 @@ class TrajectorySampler:
 
             # select the action
             a = self.pol.draw_action(state=features)
+            #a = np.clip(a, self.env.action_space.low, self.env.action_space.high)
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action
@@ -255,7 +256,8 @@ class TrajectorySampler:
 
             # select the action
             a = self.pol_b.draw_action(state=features)
-            score = self.pol_b.compute_score(state=features, action=a)
+            #a = np.clip(a, self.env.action_space.low, self.env.action_space.high)
+            score = self.pol.compute_score(state=features, action=a)  
             
             logprob_t = self.pol.compute_logprob(features, a)
             logprob_b = self.pol_b.compute_logprob(features, a)

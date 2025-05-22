@@ -5,6 +5,7 @@
 import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
+from policies import GaussianPolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 
 # todo
@@ -21,6 +22,7 @@ from adam.adam import Adam
 import torch
 import torch.optim as optim
 
+from scipy.special import logsumexp
 
 # todo
 # maybe in utils?
@@ -219,76 +221,54 @@ class PolicyGradientBpo:
                     cumulative_scores = np.cumsum(score_vector[j, :, :], axis=0)  # shape (T, D)
                     norm_vector[j] = np.linalg.norm( np.sum(discounted_rewards[:, None] * cumulative_scores, axis=0) ) # shape (1)
             
-            # questi risultati li uso per calcolare usnado gpomdp il vettor gradient_norm_vec dim = batchsize, calcola in performance gamma è già contata
-            # dovrebbe essere sum((reward_vec * gamma^t)  * cumsum(score))
-            
-            #print(f"weights t: {logprobs_vector_t}")
-            #print(f"weights : {logprobs_vector_b}")
-            
-            
-            #weights_log  = np.log(np.exp(logprobs_vector_t)) - np.log(np.exp(logprobs_vector_b))
-            #weights_trajectories_log = np.sum(weights_log, axis = 1)
-            #weights_trajectories = np.exp(weights_trajectories_log)
             
             logprobs_t_sum = np.sum(logprobs_vector_t, axis = 1)
             logprobs_b_sum = np.sum(logprobs_vector_b, axis = 1)
             weights_trajectories = np.exp(logprobs_t_sum - logprobs_b_sum)
-                
-            #print(f"weights_trajectories: {weights_trajectories}")
-            #print(f"norm_vector: {norm_vector}")
-            #print(f"beh pol paramters : {self.policy_behavioural.get_parameters()}")
-            coefficients = weights_trajectories * norm_vector #+ 1e-10
-            # if self.baselines == "avg":
-            #     b = np.mean(coefficients)
-            # elif self.baselines == "peters":
-            #     raise NotImplementedError
-            #     b = np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=0) / np.sum(rolling_scores ** 2, axis=0)
-            # else:
-            #     b = np.zeros(1)
-            #coefficients = coefficients - b
-            
+         
+            coefficients = weights_trajectories * norm_vector
+            #coefficients = coefficients - np.mean(coefficients)
             #print(f"coefficents for behavioural policy optimization {coefficients}")
-            coefficients = torch.as_tensor(coefficients, dtype = torch.float64)
             
-            
-            
-            loss = lambda coefficients, logps: - torch.mean(coefficients * torch.sum(logps, axis = 1), axis = 0)
-
-
-            # device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-            # self.policy_behavioural.net.to(device)
-            # states = states.to(device)
-            # actions = actions.to(device)
-            # coefficients = coefficients.to(device)
-              
-            #initialize behavioural policy with target policy
-            self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas))    
-                  
-            max_iter = 500
-            tol = 1000
-            optimizer = optim.Adam(self.policy_behavioural.net.parameters(), lr=1e-4)
-            
-            # Set deterministic behavior for optimizer
-            #torch.manual_seed(self.seed)
-    
-            
-            for it in range(max_iter):
-                optimizer.zero_grad()
-                #logprobs = torch.as_tensor([self.policy_behavioural.compute_logprob(state_, action_) for state_, action_ in zip(states, actions)])
-                logprobs = self.policy_behavioural.compute_logprob_batch(states, actions)
-                loss_val = loss(coefficients, logprobs)
-                loss_val.backward()
-                grad_norm = sum(p.grad.norm().item() for p in self.policy_behavioural.net.parameters() if p.grad is not None)
-
-                if it % 20 == 0 : print(f"Iter {it:03d} | Loss: {loss_val.item():.4f} | Grad Norm: {grad_norm:.4f}")
-
-                optimizer.step()
-
-                if grad_norm < tol:
-                    print("Converged.")
-                    break
+            if isinstance(self.policy, GaussianPolicy):
+                print(f"Doing Closed form optimization")
+                num = np.sum(coefficients[..., None] * np.sum(np.squeeze(actions, -1)[...,None] * states, axis = 1), axis = 0)
+                out_prod = np.einsum('ntf,ntg->ntfg', states, states)
+                den = np.sum(coefficients[...,None, None] * np.sum(out_prod, axis = 1),axis = 0)
+                self.thetas_behavioural = num @ np.linalg.inv(den)
+                self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas_behavioural))
+                print(f"Optimal behavioural policy parameters : {self.thetas_behavioural}")
+            else:
+                coefficients = torch.as_tensor(coefficients, dtype = torch.float64)
+                loss = lambda coefficients, logps: - torch.mean(coefficients * torch.sum(logps, axis = 1), axis = 0)    
+                #initialize behavioural policy with target policy
+                self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas))    
                 
-            self.thetas_behavioural = self.policy_behavioural.get_parameters()
+                max_iter = 500
+                tol = 1000
+                optimizer = optim.Adam(self.policy_behavioural.net.parameters(), lr=1e-4)
+        
+                # Set deterministic behavior for optimizer
+                #torch.manual_seed(self.seed)
+
+        
+                for it in range(max_iter):
+                    optimizer.zero_grad()
+                    #logprobs = torch.as_tensor([self.policy_behavioural.compute_logprob(state_, action_) for state_, action_ in zip(states, actions)])
+                    logprobs = self.policy_behavioural.compute_logprob_batch(states, actions)
+                    loss_val = loss(coefficients, logprobs)
+                    loss_val.backward()
+                    grad_norm = sum(p.grad.norm().item() for p in self.policy_behavioural.net.parameters() if p.grad is not None)
+
+                    if it % 20 == 0 : print(f"Iter {it:03d} | Loss: {loss_val.item():.4f} | Grad Norm: {grad_norm:.4f}")
+
+                    optimizer.step()
+
+                    if grad_norm < tol:
+                        print("Converged.")
+                        break
+            
+                self.thetas_behavioural = self.policy_behavioural.get_parameters()
                     
                     
             if self.parallel_sampling:
@@ -375,10 +355,18 @@ class PolicyGradientBpo:
             #logprobs_b_d_cumsum = np.cumsum(logprobs_vector_b_d, axis = 1)
             
             num_sum = np.concatenate((logprobs_t_sum, logprobs_t_d_sum), axis = 0)
-            den_sum = np.sum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
+            #den_sum = np.sum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
+            
+            den_sum_part1 = logsumexp(np.stack([np.log(alpha1) + logprobs_vector_t, np.log(alpha2) + logprobs_vector_b], axis=0),axis=0)
+            den_sum_part2 = logsumexp(np.stack([np.log(alpha1) + logprobs_vector_t_d,np.log(alpha2) + logprobs_vector_b_d], axis=0),axis=0)
+            den_sum = np.sum(np.concatenate((den_sum_part1, den_sum_part2), axis=0), axis=1)
+            den_cumsum = np.cumsum(np.concatenate((den_sum_part1, den_sum_part2), axis=0), axis=1)
+
+
+
 
             num_cumsum = np.concatenate((logprobs_t_cumsum, logprobs_t_d_cumsum), axis = 0)
-            den_cumsum = np.cumsum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
+            #den_cumsum = np.cumsum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
 
             '''
             weights_log  = np.log(np.exp(logprobs_vector_t ))- np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b) )
@@ -483,10 +471,13 @@ class PolicyGradientBpo:
         
         stabilizers = np.max(rolling_weights_log, axis = 0)
         
+        
         if self.baselines == "avg":
             b = np.mean(reward_vector[...,None], axis=0)
         elif self.baselines == "peters":
             b = np.sum(rolling_scores ** 2 * reward_vector[...,None] * np.exp(2*(rolling_weights_log - stabilizers[None, ...]))[...,None], axis=0) / np.sum(rolling_scores ** 2 * np.exp(2*(rolling_weights_log - stabilizers[None,...]))[...,None] , axis=0)
+            b[b != b] = 0
+
         else:
             b = np.zeros(1)
         
