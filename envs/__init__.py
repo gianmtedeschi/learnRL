@@ -15,3 +15,4 @@ from envs.inverted_pendulum import *
 from envs.dam import *
 from envs.ns_cartpole import *
 from envs.ns_cartpole import *
+from envs.cartpole_friction import *

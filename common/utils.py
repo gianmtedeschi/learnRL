@@ -65,6 +65,7 @@ def evaluate_planning(env, policy, num_episodes=1, horizon=500, persistence=Fals
             if persistence:
                 # repeat the action for the planning horizon
                 action = np.tile(action, planning_horizon).ravel()
+                action = np.array(action)
 
             # reshape the action according to the planning horizon
             action = np.array(np.split(action, planning_horizon))

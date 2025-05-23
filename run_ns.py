@@ -1,7 +1,7 @@
 # Libraries
 import argparse
 import datetime
-from algorithms import PolicyGradientBpo, PolicyGradient
+from algorithms import PolicyGradientBpo, PolicyGradient, PolicyGradientBpoMIS
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
@@ -59,7 +59,7 @@ parser.add_argument(
     default="pendulum",
     choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car", 
              "river", "cartpole", "hopper", "walker", "inverted_pendulum",
-             "reacher", "pendulum", "dam", "ns_cartpole"]
+             "reacher", "pendulum", "dam", "ns_cartpole", "cartpole_friction"]
 )
 parser.add_argument(
     "--horizon",
@@ -264,6 +264,9 @@ for i in range(args.n_trials):
     elif args.env == "dam":
         env_class = Dam
         env = Dam(horizon=args.horizon, gamma=args.gamma)
+    elif args.env == "cartpole_friction":
+        env_class = ContCartPoleFriction
+        env = ContCartPoleFriction(horizon=args.horizon, gamma=args.gamma, mu_p = args.friction)
     else:
         raise ValueError(f"Invalid env name.")
 

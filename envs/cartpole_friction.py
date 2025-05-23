@@ -17,13 +17,13 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-class ContCartPole(gym.Env):
+class ContCartPoleFriction(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 50
     }
 
-    def __init__(self, horizon, gamma, render_mode : Optional[str] = None) -> None:
+    def __init__(self, horizon, gamma, render_mode : Optional[str] = None, mu_p = 0) -> None:
         # todo do better
         self.horizon = horizon
         self.gamma = gamma
@@ -59,6 +59,9 @@ class ContCartPole(gym.Env):
         )
         self.observation_space = spaces.Box(-high, high, dtype=np.float64)
 
+        #friction
+        self.mu_p = mu_p
+        
         #self.seed()
         self.viewer = None
         self.state = None
@@ -90,7 +93,9 @@ class ContCartPole(gym.Env):
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
         temp = (force + self.polemass_length * theta_dot * theta_dot * sintheta) / self.total_mass
-        thetaacc = (self.gravity * sintheta - costheta* temp) / (self.length * (4.0/3.0 - self.masspole * costheta * costheta / self.total_mass))
+        thetaacc = ((self.gravity * sintheta - costheta* temp) - (self.mu_p*theta_dot/self.polemass_length)) / (
+            self.length * (4.0/3.0 - self.masspole * costheta * costheta / self.total_mass)
+            )
         xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
         x = x + self.tau * x_dot
         x_dot = x_dot + self.tau * xacc
