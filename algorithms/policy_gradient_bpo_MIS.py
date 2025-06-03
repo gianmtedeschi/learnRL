@@ -133,10 +133,35 @@ class PolicyGradientBpoMIS:
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(alpha=self.lr)
+
+        #initialize policies
+        self.policy.set_parameters(copy.deepcopy(self.thetas))
+        self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas_behavioural))
         return
 
     def learn(self) -> None:
         """Learning function"""
+        worker_dict = dict(
+                        env=copy.deepcopy(self.env),
+                        pol=copy.deepcopy(self.policy),
+                        pol_b= copy.deepcopy(self.policy_behavioural),
+                        dp=copy.deepcopy(self.data_processor),
+                        params=copy.deepcopy(self.thetas),
+                        params_b = copy.deepcopy(self.thetas_behavioural)
+                        # seed=self.seed
+                    )
+                    
+        # build the parallel functions
+        delayed_functions = delayed(pg_sampling_worker_bpo)
+        # parallel computation
+        res = Parallel(n_jobs=self.n_jobs)(delayed_functions(**worker_dict, seed=self.seed+j) for j in range(self.batch_size))
+        self.states = np.array([res[j][TrajectoryResults.StateList] for j in range(self.batch_size)])
+        self.actions = np.array([res[j][TrajectoryResults.ActionList] for j in range(self.batch_size)])
+        self.reward_vector = np.array([res[j][TrajectoryResults.RewList] for j in range(self.batch_size)])
+        self.perf_vector = np.array([res[j][TrajectoryResults.PERF] for j in range(self.batch_size)])
+        self.behavioural_policies.append(copy.deepcopy(self.policy_behavioural))
+
+
         for i in tqdm(range(self.ite)):
             if self.parallel_sampling:
               
@@ -165,23 +190,6 @@ class PolicyGradientBpoMIS:
                 # Update best rho
                 self.update_best_theta(current_perf=self.performance_idx[i])
                 
-                # parallel trajectory sampling
-                # prepare the parameters                
-                worker_dict = dict(
-                    env=copy.deepcopy(self.env),
-                    pol=copy.deepcopy(self.policy),
-                    pol_b = copy.deepcopy(self.policy_behavioural),
-                    dp=copy.deepcopy(self.data_processor),
-                    params=copy.deepcopy(self.thetas),
-                    params_b = copy.deepcopy(self.thetas_behavioural),
-                    # seed=self.seed
-                )
-
-                # build the parallel functions
-                delayed_functions = delayed(pg_sampling_worker_bpo)
-
-                # parallel computation
-                res = Parallel(n_jobs=self.n_jobs)(delayed_functions(**worker_dict, seed=self.seed+j+i*self.batch_size) for j in range(self.batch_size))
             else:
                 raise NotImplementedError
                 res = []
@@ -189,28 +197,25 @@ class PolicyGradientBpoMIS:
                     tmp_res = self.sampler.collect_trajectory_forBPO(params_target=copy.deepcopy(self.thetas), params_behavioural=copy.deepcopy(self.thetas_behavioural), seed=self.seed)
                     res.append(tmp_res)
             
-            perf_vector, reward_vector, states, actions, score_vector, weights_trajectories_log, _ = self.process_batch(res)
+            score_vector, weights_trajectories_log, _ = self.get_scores_and_weights(self.reward_vector, self.states, self.actions)
             
             weights_trajectories = np.exp(weights_trajectories_log)
             
             if self.estimator_type == "REINFORCE":
-                grad_samples = perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1)
+                grad_samples = self.perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1)
                 norm_vector = np.linalg.norm(grad_samples, axis = 1)
             elif self.estimator_type == "GPOMDP":
-                grad_samples = self.get_samples_gpomdp(reward_vector, score_vector)
+                grad_samples = self.get_samples_gpomdp(self.reward_vector, score_vector)
                 norm_vector = np.linalg.norm(grad_samples, axis = 1)
                      
             coefficients = weights_trajectories * norm_vector
             
             if isinstance(self.policy, GaussianPolicy):
                 print(f"Doing Closed form optimization")
-                num = np.sum(coefficients[..., None] * np.sum(np.squeeze(actions, -1)[...,None] * states, axis = 1), axis = 0)
-                out_prod = np.einsum('ntf,ntg->ntfg', states, states)
+                num = np.sum(coefficients[..., None] * np.sum(np.squeeze(self.actions, -1)[...,None] * self.states, axis = 1), axis = 0)
+                out_prod = np.einsum('ntf,ntg->ntfg', self.states, self.states)
                 den = np.sum(coefficients[...,None, None] * np.sum(out_prod, axis = 1),axis = 0)
-                lambda_reg = 1e-5  # You can tune this
-                dim = den.shape[0]
-                reg_identity = lambda_reg * np.eye(dim)
-                self.thetas_behavioural = num @ np.linalg.inv(den + reg_identity)
+                self.thetas_behavioural = num @ np.linalg.inv(den)
                 self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas_behavioural))
                 print(f"Optimal behavioural policy parameters : {self.thetas_behavioural}")
             else:
@@ -228,7 +233,7 @@ class PolicyGradientBpoMIS:
         
                 for it in range(max_iter):
                     optimizer.zero_grad()
-                    logprobs = self.policy_behavioural.compute_logprob_batch(states, actions)
+                    logprobs = self.policy_behavioural.compute_logprob_batch(self.states, self.actions)
                     loss_val = loss(coefficients, logprobs)
                     loss_val.backward()
                     grad_norm = sum(p.grad.norm().item() for p in self.policy_behavioural.net.parameters() if p.grad is not None)
@@ -268,16 +273,16 @@ class PolicyGradientBpoMIS:
                     tmp_res = self.sampler.collect_trajectory_forBPO(params_target=copy.deepcopy(self.thetas), params_behavioural= copy.deepcopy(self.thetas_behavioural), seed=self.seed)
                     res.append(tmp_res)
         
-            perf_vector, reward_vector, states, actions, score_vector, weights_trajectories_log, rolling_weights_log = self.process_batch(res)
+            score_vector, weights_trajectories_log, rolling_weights_log = self.process_batch(res)
             
             # Compute the estimated gradient            
             if self.estimator_type == "REINFORCE":
                 weights_trajectories = np.exp(weights_trajectories_log)
                 self.estimated_gradient = np.mean(
-                    perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1) * weights_trajectories[:, np.newaxis], axis=0)
+                    self.perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1) * weights_trajectories[:, np.newaxis], axis=0)
             elif self.estimator_type == "GPOMDP":
                 self.estimated_gradient = self.update_gpomdp_bpo(
-                    reward_vector=reward_vector, score_vector=score_vector, rolling_weights_log = rolling_weights_log
+                    reward_vector=self.reward_vector, score_vector=score_vector, rolling_weights_log = rolling_weights_log
                 )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
@@ -293,14 +298,6 @@ class PolicyGradientBpoMIS:
                 err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
                 raise NotImplementedError(err_msg)
             
-            self.states = states
-            self.actions = actions
-            self.perf_vector = perf_vector
-            self.reward_vector = reward_vector
-            self.behavioural_policies.append(copy.deepcopy(self.policy_behavioural))
-
-            
-
             # Log
             if self.verbose:
                 print("*" * 30)
@@ -333,8 +330,8 @@ class PolicyGradientBpoMIS:
     def process_batch(
         self, res: TrajectoryResults
     ):
-        behavioural_policies = copy.deepcopy(self.behavioural_policies)
-        behavioural_policies.append(copy.deepcopy(self.policy_behavioural))
+        self.behavioural_policies.append(copy.deepcopy(self.policy_behavioural))
+        behavioural_policies = self.behavioural_policies
         
         perf_vector = np.zeros(self.batch_size, dtype=np.float64)
         reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)            
@@ -351,18 +348,38 @@ class PolicyGradientBpoMIS:
         reward_vector = np.concatenate((self.reward_vector, reward_vector), axis = 0)
         states = np.concatenate((self.states, states), axis = 0)
         actions = np.concatenate((self.actions, actions), axis = 0)
-        
-        score_vector = np.zeros((len(behavioural_policies) * self.batch_size, self.env.horizon, self.dim),
+
+        score_vector, log_weights_trajectories, log_weights_cumsum = self.get_scores_and_weights(reward_vector, states, actions)
+
+        self.perf_vector = perf_vector
+        self.reward_vector = reward_vector
+        self.states = states
+        self.actions = actions
+
+        return score_vector,log_weights_trajectories,log_weights_cumsum
+
+    def get_scores_and_weights(self, reward_vector, states, actions):
+        mask = reward_vector
+        score_vector = np.zeros((len(self.behavioural_policies) * self.batch_size, self.env.horizon, self.dim),
                                 dtype=np.float64)
-        for j in range(len(behavioural_policies)* self.batch_size):
+        for j in range(len(self.behavioural_policies)* self.batch_size):
             for k in range(self.env.horizon):
                 score_vector[j, k, :] = self.policy.compute_score(states[j, k, :], actions[j, k, :])
 
-        logprobs_target = self.policy.compute_logprob_batch(states, actions).detach().numpy()
-        logprobs_mis = np.zeros((len(behavioural_policies), self.batch_size * len(behavioural_policies), self.env.horizon), dtype = np.float64)
-        for j in range(len(behavioural_policies)):
-            logprobs_mis[j,:,:] = behavioural_policies[j].compute_logprob_batch(states, actions).detach().numpy()
-        alpha = 1 / len(behavioural_policies)
+        score_vector = score_vector * mask[..., None]
+
+        logprobs_target = np.zeros((len(self.behavioural_policies) * self.batch_size, self.env.horizon), dtype=np.float64)
+        logprobs_target = np.array([[self.policy.compute_logprob(states[j, k, :], actions[j, k, :]) 
+                             for k in range(self.env.horizon)] 
+                            for j in range(len(self.behavioural_policies) * self.batch_size)])
+        
+        logprobs_mis = np.zeros((len(self.behavioural_policies), self.batch_size * len(self.behavioural_policies), self.env.horizon), dtype = np.float64)
+        for j in range(len(self.behavioural_policies)):
+            #logprobs_mis[j,:,:] = behavioural_policies[j].compute_logprob_batch(states, actions).detach().numpy()
+            logprobs_mis[j,:,:] = np.array([[self.behavioural_policies[j].compute_logprob(states[i, k, :], actions[i, k, :]) 
+                             for k in range(self.env.horizon)] 
+                            for i in range(len(self.behavioural_policies) * self.batch_size)])
+        alpha = 1 / len(self.behavioural_policies)
         
         logprobs_target_sum = np.sum(logprobs_target, axis = 1)
         logprobs_mis_sum = np.sum(logprobs_mis, axis = 2)
@@ -382,33 +399,44 @@ class PolicyGradientBpoMIS:
             log_alpha + logprobs_mis_cms,  # broadcasting over [K, B, H]
             axis=0  # sum over mixture components
         )  # → shape: [B, H]
-
         log_weights_cumsum = logprobs_target_cms - log_mixture_probs_cms  # → [B, H]
-        
-        
-        return perf_vector, reward_vector, states, actions, score_vector,log_weights_trajectories,log_weights_cumsum
+        return score_vector, log_weights_trajectories, log_weights_cumsum
+
 
 
     def get_samples_gpomdp(
-            self, reward_vector: np.array,
-            score_trajectory: np.array
-    ) -> np.array:
+        self, 
+        reward_vector: np.ndarray,          # shape: (N, H)
+        score_trajectory: np.ndarray        # shape: (N, H, m)
+    ) -> np.ndarray:
         gamma = self.env.gamma
         horizon = self.env.horizon
-        gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_trajectory, axis=1) + 1e-10
-
+        gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** np.arange(horizon)
         
-        if self.baselines == "avg":
-            b = np.mean(reward_vector[...,None], axis=0)
-        elif self.baselines == "peters":
-            b = np.sum(rolling_scores ** 2 * reward_vector[...,None], axis=0) / np.sum(rolling_scores ** 2, axis=0)
-        else:
-            b = np.zeros(1)
+        # === Mask: assume 0 reward marks episode end (true for CartPole)
+        mask = (reward_vector != 0).astype(np.float64)  # shape: (N, H)
+        
+        # === Masked score trajectory (avoid using padded/terminated time steps)
+        masked_scores = score_trajectory * mask[..., None]  # (N, H, m)
+        
+        # === Rolling scores (cumulative sum along time)
+        rolling_scores = np.cumsum(masked_scores, axis=1)  # (N, H, m)
+        
+        # === Discounted reward
+        discounted_rewards = reward_vector * gamma_seq[None, :]  # (N, H)
+        
+        # === Baseline: Peters per-time-step per-param vector baseline
+        squared_scores = rolling_scores ** 2  # (N, H, m)
+        b_num = np.sum(squared_scores * discounted_rewards[..., None], axis=0)  # (H, m)
+        b_den = np.sum(squared_scores, axis=0) + 1e-10                          # (H, m)
+        b = b_num / b_den                                                      # (H, m)
 
-        reward_trajectory = (reward_vector[...,None] - b[np.newaxis,...]) * rolling_scores
+        # === Advantage: (r - b) * score
+        adv = (discounted_rewards[..., None] - b[None, :, :]) * rolling_scores  # (N, H, m)
 
-        samples = np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1)
+        # === Final GPOMDP sample estimate (sum over time)
+        samples = np.sum(adv, axis=1)  # (N, m)
+
         return samples
 
         
@@ -422,24 +450,31 @@ class PolicyGradientBpoMIS:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_vector, axis=1) + 1e-10
-        rolling_weights = np.exp(rolling_weights_log) 
+        rolling_scores = np.cumsum(score_vector, axis=1) 
         
+        rolling_weights = np.exp(rolling_weights_log) 
+         
         stabilizers = np.max(rolling_weights_log, axis = 0)
         
         
         if self.baselines == "avg":
-            b = np.mean(reward_vector[...,None], axis=0)
+            #only for cartpole 
+            n_k = np.sum(reward_vector, axis = 0)
+            n_k[n_k==0.] = 1
+            b = np.sum(reward_vector, axis=0) / n_k
+            reward_trajectory = (reward_vector - b[np.newaxis,...])[...,None] * rolling_scores * rolling_weights[..., np.newaxis]
+
         elif self.baselines == "peters":
             b = np.sum(rolling_scores ** 2 * reward_vector[...,None] * np.exp(2*(rolling_weights_log - stabilizers[None, ...]))[...,None], axis=0) / np.sum(rolling_scores ** 2 * np.exp(2*(rolling_weights_log - stabilizers[None,...]))[...,None] , axis=0)
             b[b != b] = 0
+            reward_trajectory = (reward_vector[..., np.newaxis] - b[np.newaxis,...] ) * rolling_scores * rolling_weights[..., np.newaxis]
+
 
         else:
-            b = np.zeros(1)
-        
-        reward_trajectory = (reward_vector[..., np.newaxis] - b[np.newaxis,...] ) * rolling_scores * rolling_weights[..., np.newaxis]
+            reward_trajectory = reward_vector[..., None] * rolling_scores * rolling_weights[..., np.newaxis]
+
         self.estimated_gradient = np.mean(
-            np.sum(gamma_seq[:, np.newaxis]*reward_trajectory, axis = 1 ),
+            np.sum(gamma_seq[np.newaxis, :, np.newaxis]*reward_trajectory, axis = 1 ),
             axis = 0
         )
         
