@@ -257,13 +257,14 @@ class TrajectorySampler:
             # select the action
             a = self.pol_b.draw_action(state=features)
             #a = np.clip(a, self.env.action_space.low, self.env.action_space.high)
+
             score = self.pol.compute_score(state=features, action=a)  
             
             logprob_t = self.pol.compute_logprob(features, a)
             logprob_b = self.pol_b.compute_logprob(features, a)
 
             # play the action
-            state, rew, done, _ = self.env.step(a)
+            _, rew, done, _ = self.env.step(a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
