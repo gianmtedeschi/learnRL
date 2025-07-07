@@ -260,7 +260,7 @@ for i in range(args.n_trials):
         env = ContCartPole(horizon=args.horizon, gamma=args.gamma)
     elif args.env == "pendulum":
         env_class = PendulumEnv
-        env = PendulumEnv(horizon=args.horizon, gamma=args.gamma)
+        env = PendulumEnv(horizon=args.horizon, gamma=args.gamma, friction = args.friction)
     elif args.env == "dam":
         env_class = Dam
         env = Dam(horizon=args.horizon, gamma=args.gamma)
