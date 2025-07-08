@@ -132,6 +132,7 @@ class PendulumEnv(gym.Env):
         self.last_u = u  # for rendering
         costs = angle_normalize(th) ** 2 + 0.1 * thdot**2 + 0.001 * (u**2)
 
+
         coulomb_torque = -self.friction * np.sign(thdot) if abs(thdot) > 0.01 else 0
  
         newthdot = thdot + (3 * g / (2 * l) * np.sin(th) + 3.0 / (m * l**2) * (u + coulomb_torque)) * dt
@@ -149,6 +150,7 @@ class PendulumEnv(gym.Env):
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
+        start = options.get("start") if options else None
         if options is None:
             high = np.array([DEFAULT_X, DEFAULT_Y])
         else:
@@ -159,15 +161,20 @@ class PendulumEnv(gym.Env):
             x = utils.verify_number_and_cast(x)
             y = utils.verify_number_and_cast(y)
             high = np.array([x, y])
+
         low = -high  # We enforce symmetric limits.
         self.thetas = self.np_random.uniform(low=low, high=high)
         self.last_u = None
-
+        if start == "up":
+            self.thetas[0] = 0
+        if start == "down":
+            self.thetas[0] = np.pi
+    
         if self.render_mode == "human":
             self.render()
 
         self.state = self._get_obs()
-
+        
     def _get_obs(self):
         theta, thetadot = self.thetas
         return np.array([np.cos(theta), np.sin(theta), thetadot], dtype=np.float32)
