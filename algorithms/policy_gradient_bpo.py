@@ -1,5 +1,5 @@
-"""Policy Gradient Implementation"""
-# todo baseline
+"""Policy Gradient BPO Implementation"""
+
 
 # imports
 import numpy as np
@@ -8,7 +8,6 @@ from policies import BasePolicy
 from policies import GaussianPolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 
-# todo
 from common.utils import TrajectoryResults
 
 from joblib import Parallel, delayed
@@ -24,8 +23,6 @@ import torch.optim as optim
 
 from scipy.special import logsumexp
 
-# todo
-# maybe in utils?
 import os
 
 
@@ -49,12 +46,15 @@ class PolicyGradientBpo:
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             debug: bool = False,
-            seed = 0,
-            defensive_batch_size = 0,
-            evaluation_batch_size = 100
-            # numero behavioural policies, o lista batches tipo [100,100,100] per trovare behavioural
-            #se riusare le behavioural policies vecchie, e fino a che numero k ( default 1 )
-            # defensive batch
+            seed: int = 0,
+            defensive_batch_size: int  = 0,
+            evaluation_batch_size: int = 100,
+            kl_reg: float = 0,
+            behavioural_std: float = 0.1,
+            max_iter_optimization: int = 1000,
+            tol: float = 1e-4,
+            lr_behavioral: float = 1e-2
+
             
     ) -> None:
         # Class' parameter with checks
@@ -107,6 +107,12 @@ class PolicyGradientBpo:
         self.seed = seed
         self.defensive_batchsize = defensive_batch_size
         self.evaluation_batch_size = evaluation_batch_size
+        self.kl_reg = kl_reg
+        self.behavioural_std = behavioural_std
+        #behavioral policy optimization parameters
+        self.max_iter_optimization = max_iter_optimization
+        self.tol = tol
+        self.lr_behavioral = lr_behavioral
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
         self.theta_behavioural_history = np.zeros((self.ite, self.dim), dtype = np.float64)
@@ -119,6 +125,7 @@ class PolicyGradientBpo:
             env=self.env, pol=self.policy, data_processor=self.data_processor
         )
         self.deterministic_curve = np.zeros(self.ite)
+        self.costs = np.zeros(ite, dtype = np.float64)
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
@@ -128,10 +135,13 @@ class PolicyGradientBpo:
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(alpha=self.lr)
+        
         return
+    
 
     def learn(self) -> None:
         """Learning function"""
+        self.policy_behavioural.std_dev = self.behavioural_std
         for i in tqdm(range(self.ite)):
             if self.parallel_sampling:
               
@@ -145,7 +155,6 @@ class PolicyGradientBpo:
                     pol=copy.deepcopy(self.policy),
                     dp=copy.deepcopy(self.data_processor),
                     params=copy.deepcopy(self.thetas),
-                    # seed = self.seed
                 )
                 delayed_functions = delayed(pg_sampling_worker)
 
@@ -155,7 +164,6 @@ class PolicyGradientBpo:
                 for j in range(self.evaluation_batch_size):
                     perf_vector[j] = res[j][TrajectoryResults.PERF]
                 
-                #print(f"perf_vector: {perf_vector}")
                 self.performance_idx[i] = np.mean(perf_vector)
                 # Update best rho
                 self.update_best_theta(current_perf=self.performance_idx[i])
@@ -169,7 +177,6 @@ class PolicyGradientBpo:
                     dp=copy.deepcopy(self.data_processor),
                     params=copy.deepcopy(self.thetas),
                     params_b = copy.deepcopy(self.thetas_behavioural),
-                    # seed=self.seed
                 )
 
                 # build the parallel functions
@@ -205,6 +212,7 @@ class PolicyGradientBpo:
                 states[j,:,:] = res[j][TrajectoryResults.StateList]
                 actions[j,:,:] = res[j][TrajectoryResults.ActionList]
                 
+            self.costs[i] = np.mean(perf_vector)
             
             if self.estimator_type == "REINFORCE":
                 grad_samples = perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1)
@@ -217,8 +225,11 @@ class PolicyGradientBpo:
             logprobs_b_sum = np.sum(logprobs_vector_b, axis = 1)
             weights_trajectories = np.exp(logprobs_t_sum - logprobs_b_sum)
          
-            coefficients = weights_trajectories * norm_vector
-            #print(f"coefficents for behavioural policy optimization {coefficients}")
+            coefficients = weights_trajectories * (norm_vector + self.kl_reg)
+            if self.debug :
+                print(f"coefficents for behavioural policy optimization {coefficients}")
+                print(f"Gradient norms: {norm_vector}")
+                print(f"weights trajectories : {weights_trajectories}")
             
             if isinstance(self.policy, GaussianPolicy):
                 print(f"Doing Closed form optimization")
@@ -237,16 +248,11 @@ class PolicyGradientBpo:
                 loss = lambda coefficients, logps: - torch.mean(coefficients * torch.sum(logps, axis = 1), axis = 0)    
                 #initialize behavioural policy with target policy
                 self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas))    
-                
-                max_iter = 500
-                tol = 1000
-                optimizer = optim.Adam(self.policy_behavioural.net.parameters(), lr=1e-4)
-        
+                optimizer = optim.Adam(self.policy_behavioural.net.parameters(), lr=self.lr_behavioral)
                 # Set deterministic behavior for optimizer
                 #torch.manual_seed(self.seed)
 
-        
-                for it in range(max_iter):
+                for it in range(self.max_iter_optimization):
                     optimizer.zero_grad()
                     logprobs = self.policy_behavioural.compute_logprob_batch(states, actions)
                     loss_val = loss(coefficients, logprobs)
@@ -257,7 +263,7 @@ class PolicyGradientBpo:
 
                     optimizer.step()
 
-                    if grad_norm < tol:
+                    if grad_norm < self.tol:
                         print("Converged.")
                         break
             
@@ -265,7 +271,7 @@ class PolicyGradientBpo:
                     
                     
             if self.parallel_sampling:
-                    # parallel trajectory sampling
+                    # parallel trajectory sampling from behavioral
                     # prepare the parameters
                     worker_dict = dict(
                         env=copy.deepcopy(self.env),
@@ -274,10 +280,9 @@ class PolicyGradientBpo:
                         dp=copy.deepcopy(self.data_processor),
                         params=copy.deepcopy(self.thetas),
                         params_b = copy.deepcopy(self.thetas_behavioural)
-                        # seed=self.seed
                     )
                     
-                    # sampling from target only
+                    # sampling from target
                     worker_dict_defensive = dict(
                         env = copy.deepcopy(self.env),
                         pol =copy.deepcopy(self.policy), 
@@ -355,8 +360,11 @@ class PolicyGradientBpo:
             logprobs_t_d_cumsum = np.cumsum(logprobs_vector_t_d, axis = 1)
             
             num_sum = np.concatenate((logprobs_t_sum, logprobs_t_d_sum), axis = 0)
-            #den_sum = np.sum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
             
+            # Computes the log of the sum of exponentials (log-sum-exp) of two sequences:
+            #   - log(alpha1) + logprobs_vector_t
+            #   - log(alpha2) + logprobs_vector_b
+            # This is numerically stable way to compute log(exp(log(alpha1)+logprobs_vector_t) + exp(log(alpha2)+logprobs_vector_b))
             den_sum_part1 = logsumexp(np.stack([np.log(alpha1) + logprobs_vector_t, np.log(alpha2) + logprobs_vector_b], axis=0),axis=0)
             den_sum_part2 = logsumexp(np.stack([np.log(alpha1) + logprobs_vector_t_d,np.log(alpha2) + logprobs_vector_b_d], axis=0),axis=0)
             
@@ -364,7 +372,6 @@ class PolicyGradientBpo:
             den_cumsum = np.cumsum(np.concatenate((den_sum_part1, den_sum_part2), axis=0), axis=1)
 
             num_cumsum = np.concatenate((logprobs_t_cumsum, logprobs_t_d_cumsum), axis = 0)
-            #den_cumsum = np.cumsum(np.concatenate((np.log(alpha1 * np.exp(logprobs_vector_t) + alpha2 *np.exp(logprobs_vector_b)), np.log(alpha1 * np.exp(logprobs_vector_t_d) + alpha2 * np.exp(logprobs_vector_b_d))), axis = 0 ), axis = 1)
 
             
             # Compute the estimated gradient            
@@ -417,6 +424,10 @@ class PolicyGradientBpo:
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration() # ha senso lasciarlo ??? mi sa di no
             self.policy_behavioural.reduce_exploration()
+            if self.debug:
+                print(f"DEBUG STD_DEV: {self.policy_behavioural.std_dev}")
+                print(f"DEBUG KL COEFFICIENT : {self.kl_reg}")
+
 
         return
 
@@ -474,14 +485,10 @@ class PolicyGradientBpo:
             np.sum(gamma_seq[:, np.newaxis]*reward_trajectory, axis = 1 ),
             axis = 0
         )
-        
-        # print(f"Reward Vector: {reward_vector}")
-        # print(f"rolling_scores: {rolling_scores}")
-        # print(f"weights_log: {weights_log}")
-        #print(f"rolling_weighst: {rolling_weights}")
-        print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
-        print(f"estimated gradient: {self.estimated_gradient}")
-        
+        if self.debug :
+            print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
+            print(f"estimated gradient: {self.estimated_gradient}")
+            
         
         return self.estimated_gradient
         
@@ -504,6 +511,7 @@ class PolicyGradientBpo:
                 "performance": np.array(self.performance_idx, dtype=float).tolist(),
                 "best_theta": np.array(self.best_theta, dtype=float).tolist(),
                 "gradient_history": np.array(self.estimated_gradient, dtype=np.float64).tolist(),
+                "cost": np.array(self.costs, dtype = float).tolist()
             }
         else:
             results = {

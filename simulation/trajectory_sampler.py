@@ -272,7 +272,7 @@ class TrajectorySampler:
             # update the vectors of rewards scores and state
             rewards[t] = rew
             scores[t, :] = score
-            states[t, :] = state
+            states[t, :] = features
             actions[t,:] = a
             logprobs_t[t] = logprob_t
             logprobs_b[t] = logprob_b

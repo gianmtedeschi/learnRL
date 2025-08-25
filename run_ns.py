@@ -178,6 +178,24 @@ parser.add_argument(
     type=float,
     default=0.01
 )
+parser.add_argument(
+    "--kl",
+    help="Kl coefficient for behavioural optimization.",
+    type=float,
+    default=0.0
+)
+parser.add_argument(
+    "--behavioural_std",
+    help="The exploration amount of behavioural policy.",
+    type=float,
+    default=0.1
+)
+parser.add_argument(
+    "--defensive_batchsize",
+    help="The number of trajectories to sample from target policy",
+    type=int,
+    default=0
+)
 
 args = parser.parse_args()
 
@@ -350,6 +368,9 @@ for i in range(args.n_trials):
         debug = args.debug,
         n_jobs = args.n_jobs,
         seed=seed,
+        kl_reg = args.kl,
+        behavioural_std = args.behavioural_std,
+        defensive_batch_size = args.defensive_batchsize
         # defensive batchsize default
     )
     alg = PolicyGradientBpo(**alg_parameters)
