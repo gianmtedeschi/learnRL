@@ -62,7 +62,7 @@ class GaussianPolicy(BasePolicy, ABC):
         else:
             mean = np.array(self.parameters @ state, dtype=np.float64)
 
-        action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
+        action = np.array(np.random.normal(mean, self.std_dev, size = 1), dtype=np.float64)
 
         return action
 
