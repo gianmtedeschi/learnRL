@@ -3,7 +3,7 @@
 # imports
 from envs import BaseEnv
 from policies import BasePolicy
-from data_processors import BaseProcessor
+from data_processors import BaseProcessor, IdentityDataProcessor, KernelDataProcessor
 import numpy as np
 import math
 import copy
@@ -130,6 +130,10 @@ class TrajectorySampler:
         err_msg = "[PGTrajectorySampler] no data_processor provided!"
         assert data_processor is not None, err_msg
         self.dp = data_processor
+        if isinstance(data_processor, IdentityDataProcessor):
+            self.s_dim = env.state_dim
+        elif isinstance(data_processor, KernelDataProcessor):
+            self.s_dim = data_processor.num_states
         
         self.pol_b = pol_b
 
@@ -152,7 +156,14 @@ class TrajectorySampler:
                 np.array: vector of all the scores
         """
         # reset the environment
-        self.env.reset(seed=seed)
+        self.env.reset(seed = seed)
+
+        # self.env.reset(seed = seed, options={"start": "up"})
+        # if np.random.rand() < 0.04:
+        #     self.env.reset(seed = seed, options={"start": "down"})
+        #self.env.reset(seed = seed, options={"start": "down"})
+        #self.env.reset(seed=seed, options={"x_init": 1.5, "y_init": 1})
+
         if starting_state is not None:
             self.env.state = copy.deepcopy(starting_state)
 
@@ -160,6 +171,7 @@ class TrajectorySampler:
         np.random.seed(seed)
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
+        mask = np.zeros(self.env.horizon, dtype = np.float64)
         if split:
             scores = np.zeros((self.env.horizon, len(self.pol.history.get_all_leaves()), self.pol.tot_params), dtype=np.float64)
         else:
@@ -192,17 +204,19 @@ class TrajectorySampler:
             rewards[t] = rew
             scores[t, :] = score
             states[t, :] = state
+            mask[t] = 1
 
             if done:
                 if t < self.env.horizon - 1:
                     rewards[t+1:] = 0
                     scores[t+1:] = 0
+                    mask[t+1:] = 0
                 break
         
         if split:
             return [perf, rewards, scores, states]
         else:  
-            return [perf, rewards, scores]
+            return [perf, rewards, scores, mask]
         
     def collect_trajectory_forBPO(
             self, params_target: np.array = None,
@@ -224,7 +238,14 @@ class TrajectorySampler:
                 np.array: vector of all the scores
         """
         # reset the environment
-        self.env.reset(seed=seed)
+        self.env.reset(seed = seed)
+
+
+        # self.env.reset(seed=seed, options={"start": "up"}) #ATTENZIONE MODIFICATO PER PENDULUM
+        # if np.random.rand() < 0.0185:
+        #     self.env.reset(seed = seed, options={"start": "down"})
+        # #self.env.reset(seed=seed, options={"x_init": 1.5, "y_init": 1})
+
         if starting_state is not None:
             self.env.state = copy.deepcopy(starting_state)
 
@@ -232,12 +253,13 @@ class TrajectorySampler:
         np.random.seed(seed)
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
+        mask = np.zeros(self.env.horizon, dtype = np.float64)
         if split:
             scores = np.zeros((self.env.horizon, len(self.pol.history.get_all_leaves()), self.pol.tot_params), dtype=np.float64)
         else:
             scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
 
-        states = np.zeros((self.env.horizon, self.env.state_dim), dtype=np.float64)
+        states = np.zeros((self.env.horizon, self.s_dim), dtype=np.float64)
         actions = np.zeros((self.env.horizon, self.env.action_dim), dtype= np.float64)
         logprobs_t = np.zeros(self.env.horizon, dtype = np.float64)
         logprobs_b = np.zeros(self.env.horizon, dtype = np.float64)
@@ -276,6 +298,7 @@ class TrajectorySampler:
             actions[t,:] = a
             logprobs_t[t] = logprob_t
             logprobs_b[t] = logprob_b
+            mask[t] = 1
 
             if done:
                 if t < self.env.horizon - 1:
@@ -283,6 +306,7 @@ class TrajectorySampler:
                     scores[t+1:] = 0
                     logprobs_t[t+1:] = 0
                     logprobs_b[t+1:] = 0
+                    mask[t+1:] = 0
                     # dovrei gestire le logprob in qualche moddo, tipo -inf ? però poi quando li sommo è un problema, ha più senso 0
                     
                 break
@@ -290,7 +314,7 @@ class TrajectorySampler:
         if split:
             return [perf, rewards, scores, states, logprobs_t, logprobs_b]
         else:  
-            return [perf, rewards, scores, states, logprobs_t, logprobs_b, actions]
+            return [perf, rewards, scores, mask, states, logprobs_t, logprobs_b, actions]
     
     
     def collect_trajectory_mixed_planning(

@@ -180,11 +180,11 @@ class Continuous_MountainCarEnv(gym.Env):
         if terminated:
             reward = 100.0
         
-        # reward -= math.pow(action[0], 2) * 0.1
-        # reward -= math.pow(position - self.goal_position, 2) * 0.1
-        # reward += (-1 + self._height(position)) * 0.1
+        reward -= math.pow(force, 2) * 0.1
+        reward -= math.pow(position - self.goal_position, 2) * 0.1
+        reward += (-1 + self._height(position)) * 0.1
 
-        reward += (abs(action[0]) - 1) * 0.1 if action[0] * velocity >= 0 else (-abs(action[0]) - 1) * 0.1
+        #reward += (abs(action[0]) - 1) * 0.1 if action[0] * velocity >= 0 else (-abs(action[0]) - 1) * 0.1
         # reward += (position - 0.45)
 
         # reward += math.pow(velocity, 2)

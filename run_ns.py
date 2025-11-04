@@ -2,7 +2,7 @@
 import argparse
 import datetime
 from algorithms import PolicyGradientBpo, PolicyGradient, PolicyGradientBpoMIS
-from data_processors import IdentityDataProcessor
+from data_processors import IdentityDataProcessor, KernelDataProcessor, RBFMountainCarDataProcessor, NormalizationDataProcessor, RBFMountainCar_v5DataProcessor
 from envs import *
 from policies import *
 from art import *
@@ -59,7 +59,7 @@ parser.add_argument(
     default="pendulum",
     choices=["swimmer", "half_cheetah", "ant", "lq", "minigolf", "mountain_car", 
              "river", "cartpole", "hopper", "walker", "inverted_pendulum",
-             "reacher", "pendulum", "dam", "ns_cartpole", "cartpole_friction"]
+             "reacher", "pendulum", "dam", "ns_cartpole", "cartpole_friction", "mountain_car_simmetric", "mountain_car_4", "mountain_car_5"]
 )
 parser.add_argument(
     "--horizon",
@@ -197,6 +197,30 @@ parser.add_argument(
     default=0
 )
 
+parser.add_argument(
+    "--data_processor",
+    help="state transformation to apply before policy step",
+    type= str,
+    default= 'identity',
+    choices= ['identity' , 'rbf', 'rbf_mcar', 'normalization', 'rbf_mcar_5']
+)
+
+parser.add_argument(
+    "--algorithm",
+    help = " learning algorithm, off policy or on policy",
+    type = str,
+    default= 'off_policy',
+    choices= ['on_policy', 'off_policy']
+)
+
+parser.add_argument(
+    "--layers",
+    help = "only for deep policy, number of nureons per layer",
+    type = int,
+    default = 32
+)
+
+
 args = parser.parse_args()
 
 if args.std < 1:
@@ -270,6 +294,9 @@ for i in range(args.n_trials):
     elif args.env == "mountain_car":
         env_class = Continuous_MountainCarEnv
         env = Continuous_MountainCarEnv(horizon=args.horizon, gamma=args.gamma)
+    elif args.env == "mountain_car_simmetric":
+        env_class = Continuous_MountainCarSimmEnv_v3
+        env = Continuous_MountainCarSimmEnv_v3(horizon = args.horizon, gamma = args.gamma, friction = args.friction)
     elif args.env == "river":
         env_class = RiverSwimContinuous
         env = RiverSwimContinuous(horizon=args.horizon, gamma=args.gamma)
@@ -285,20 +312,42 @@ for i in range(args.n_trials):
     elif args.env == "cartpole_friction":
         env_class = ContCartPoleFriction
         env = ContCartPoleFriction(horizon=args.horizon, gamma=args.gamma, mu_p = args.friction)
+    elif args.env == "mountain_car_4":
+        env_class =  Continuous_MountainCarSimmEnv_v4
+        env = Continuous_MountainCarSimmEnv_v4(horizon = args.horizon, gamma = args.gamma, friction = args.friction)
+    elif args.env == "mountain_car_5":
+        env_class =  Continuous_MountainCarSimmEnv_v5
+        env = Continuous_MountainCarSimmEnv_v5(horizon = args.horizon, gamma = args.gamma, friction = args.friction)
+
     else:
         raise ValueError(f"Invalid env name.")
 
-    s_dim = env.state_dim
+    #s_dim = env.state_dim
     a_dim = env.action_dim
 
     """Data Processor"""
-    dp = IdentityDataProcessor()
+
+    if args.data_processor == 'identity':
+        dp = IdentityDataProcessor()
+        s_dim = env.state_dim
+    elif args.data_processor == 'normalization':
+        dp = NormalizationDataProcessor()
+        s_dim = env.state_dim
+    elif args.data_processor == 'rbf':
+        dp = KernelDataProcessor()
+        s_dim = dp.num_states
+    elif args.data_processor == 'rbf_mcar':
+        dp = RBFMountainCarDataProcessor()
+        s_dim = dp.num_states
+    elif args.data_processor == 'rbf_mcar_5':
+        dp = RBFMountainCar_v5DataProcessor()
+        s_dim = dp.num_states
 
     """Policy"""
     if args.pol == "linear_gaussian":
         tot_params = s_dim * a_dim
         pol = GaussianPolicy(
-            parameters=np.ones(tot_params),
+            parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
             std_dev=args.std,
@@ -308,36 +357,52 @@ for i in range(args.n_trials):
         )
     elif args.pol in ["nn", "deep_gaussian"]:
         net = nn.Sequential(
-            nn.Linear(s_dim, 50, bias=False),
+            nn.Linear(s_dim, args.layers, bias=True),
             nn.Tanh(),
-            nn.Linear(50, 25, bias=False),
+            nn.Linear(args.layers, args.layers, bias=True),
             nn.Tanh(),
-            nn.Linear(25, a_dim, bias=False),
+            nn.Linear(args.layers, a_dim, bias=False),
             nn.Tanh()
         )
-        model_desc = dict(
-            layers_shape=[(s_dim, 50), (50, 25), (25, a_dim)]
-            # layers_shape=[(s_dim, a_dim)]
-        )
+
+        for m in net:
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+
+        # model_desc = dict(
+        #     layers_shape=[(s_dim, args.layers), (args.layers, args.layers), (args.layers, a_dim)]
+        # )
+
+
+
+        # PER PENDOLO PER USARE LA LINEAR MA FARE OPTIMIZTION NON IN FORMA CHIUSA
+        # net = nn.Sequential(
+        #     nn.Linear(s_dim, a_dim, bias=False),
+        # )
+
+        # model_desc = dict(
+        #     layers_shape=[(s_dim, a_dim)]
+        # )
+
         if args.pol == "nn":
             pol = NeuralNetworkPolicy(
                 parameters=None,
                 input_size=s_dim,
                 output_size=a_dim,
-                model=copy.deepcopy(net),
-                model_desc=copy.deepcopy(model_desc)
+                model=copy.deepcopy(net)
             )
+
         elif args.pol == "deep_gaussian":
             pol = DeepGaussianPolicy(
-                # parameters=np.load('/Users/gianmarcotedeschi/Projects/learnRL/results_swingup/_03_21-17_32_PG_300_ns_cartpole_2_2000_10_adam_0005_100_noclip_force_10.0_mu_p_0.001__deep_gaussian_1475_std_1_noise_00/trial_0/policy_params.npy'),
+                #parameters= np.load("/home/tedeschi_bpo/learn_RL/results/pendulum_friction/decay/test_tol1e-4{0}_07_14-19_43_PG_200_pendulum_200_099_constant_001_100_noclip__deep_gaussian_3375_std_1_noise_00/trial_0/policy_params.npy"),
                 parameters=None,
                 input_size=s_dim,
                 output_size=a_dim,
                 model=copy.deepcopy(net),
-                model_desc=copy.deepcopy(model_desc),
                 std_dev=args.std,
+                #std_decay=5e-2,
                 std_decay=0,
-                std_min=1e-6
+                std_min=0.25
             )
         else:
             raise ValueError("Invalid nn policy name.")
@@ -351,29 +416,53 @@ for i in range(args.n_trials):
     dir_name = base_dir + dir_name + "/" + f"trial_{i}"
 
     """Algorithms"""
-    alg_parameters = dict(
-        lr=[args.lr],
-        lr_strategy=args.lr_strategy,
-        estimator_type=args.estimator,
-        initial_theta=pol.parameters,
-        ite=args.ite,
-        batch_size=args.batch,
-        env=env,
-        policy=pol,
-        data_processor=dp,
-        directory=dir_name,
-        verbose=args.verbose,
-        checkpoint_freq=50,
-        baselines=args.baseline,
-        debug = args.debug,
-        n_jobs = args.n_jobs,
-        seed=seed,
-        kl_reg = args.kl,
-        behavioural_std = args.behavioural_std,
-        defensive_batch_size = args.defensive_batchsize
-        # defensive batchsize default
-    )
-    alg = PolicyGradientBpo(**alg_parameters)
+
+    if args.algorithm == "off_policy": 
+        alg_parameters = dict(
+            lr=[args.lr],
+            lr_strategy=args.lr_strategy,
+            estimator_type=args.estimator,
+            initial_theta=pol.parameters,
+            ite=args.ite,
+            batch_size=args.batch,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=args.verbose,
+            checkpoint_freq=50,
+            baselines=args.baseline,
+            debug = args.debug,
+            n_jobs = args.n_jobs,
+            seed=seed,
+            kl_reg = args.kl,
+            behavioural_std = args.behavioural_std,
+            defensive_batch_size = args.defensive_batchsize
+            # defensive batchsize default
+        )
+        alg = PolicyGradientBpo(**alg_parameters)
+
+    elif args.algorithm == "on_policy":
+        alg_parameters = dict(
+            lr=[args.lr],
+            lr_strategy=args.lr_strategy,
+            estimator_type=args.estimator,
+            initial_theta=pol.parameters,
+            ite=args.ite,
+            batch_size=args.batch,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=args.verbose,
+            checkpoint_freq=50,
+            baselines=args.baseline,
+            debug = args.debug,
+            n_jobs = args.n_jobs,
+            seed=seed,
+            # defensive batchsize default
+        )
+        alg = PolicyGradient(**alg_parameters)
     
 
     print(text2art(f"==  PG TEST on {args.env} =="))
@@ -396,6 +485,7 @@ with io.open(time_dir, 'w', encoding='utf-8') as f:
         f.close()
 
 if args.animate:
+    # non c'è l'attrito qua 
     eval_env = env_class(horizon=args.horizon, gamma=args.gamma, render_mode="rgb_array")
-    frames = evaluate_planning(eval_env, pol, num_episodes=1, horizon=args.horizon, dir=dir_name)
+    frames = evaluate_planning(eval_env, pol, dp, num_episodes=1, horizon=args.horizon, dir=dir_name)
     imageio.mimsave(dir_render, frames, duration=33)

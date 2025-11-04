@@ -16,3 +16,8 @@ from envs.dam import *
 from envs.ns_cartpole import *
 from envs.ns_cartpole import *
 from envs.cartpole_friction import *
+from envs.continuous_mountain_car_simmetric import *
+from envs.continuous_mountain_car_simmetric_v2 import *
+from envs.continuous_mountain_car_simmetric_v3 import *
+from envs.continuous_mountain_car_simmetric_v4 import *
+from envs.continuous_mountain_car_simmetric_v5 import *

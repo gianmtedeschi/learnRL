@@ -25,10 +25,11 @@ class TrajectoryResults:
     PERF = 0
     RewList = 1
     ScoreList = 2
-    StateList = 3
-    Logprob_target = 4
-    Logprob_behavioural = 5
-    ActionList = 6
+    Mask = 3
+    StateList = 4
+    Logprob_target = 5
+    Logprob_behavioural = 6
+    ActionList = 7
 
 
 class ParamSamplerResults:
@@ -43,7 +44,7 @@ class SplitResults:
     ValidTrajectories = 3
 
 
-def evaluate_planning(env, policy, num_episodes=1, horizon=500, persistence=False, planning_horizon=1, dir=None):
+def evaluate_planning(env, policy, dp,  num_episodes=1, horizon=500, persistence=False, planning_horizon=1, dir=None):
     """
     Evaluate a RL agent
     :param env: (Env object) the Gym environment
@@ -60,6 +61,7 @@ def evaluate_planning(env, policy, num_episodes=1, horizon=500, persistence=Fals
         frames = []
         for t in range(horizon): # iterate over the steps until termination
             obs = env.state
+            obs = dp.transform(obs)
             action = policy.draw_action(obs)
 
             if persistence:
