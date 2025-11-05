@@ -2,7 +2,7 @@ from data_processors.base_processor import BaseProcessor
 import numpy as np
 import itertools
 
-s_NUM_RBF = 30
+s_NUM_RBF = 40
 v_NUM_RBF = 15
 
 NUM_STATES = s_NUM_RBF* v_NUM_RBF

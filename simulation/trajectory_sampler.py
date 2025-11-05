@@ -132,7 +132,7 @@ class TrajectorySampler:
         self.dp = data_processor
         if isinstance(data_processor, IdentityDataProcessor):
             self.s_dim = env.state_dim
-        elif isinstance(data_processor, KernelDataProcessor):
+        else:
             self.s_dim = data_processor.num_states
         
         self.pol_b = pol_b

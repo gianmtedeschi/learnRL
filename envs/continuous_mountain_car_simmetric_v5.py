@@ -120,8 +120,8 @@ class Continuous_MountainCarSimmEnv_v5(gym.Env):
     def __init__(self, horizon=200, gamma=1, render_mode: Optional[str] = None, friction = 0, goal_velocity=0):
         self.min_action = -1.0
         self.max_action = 1.0
-        self.min_position = -4.5
-        self.max_position = 4.5
+        self.min_position = -4.9
+        self.max_position = 4.9
         self.max_speed = 0.07
         self.goal_position = (
             0.0  # was 0.5 in gymnasium, 0.45 in Arnaud de Broissia's version
@@ -245,7 +245,7 @@ class Continuous_MountainCarSimmEnv_v5(gym.Env):
             #     else:
             #         low, high = np.array([1.05, -0.01] ), np.array([1.57, 0.01])
 
-            low, high = np.array([-4.5, -0.02] ), np.array([4.5, 0.02])
+            low, high = np.array([-4.9, -0.02] ), np.array([4.9, 0.02])
             self.state = self.np_random.uniform(low = low, high = high)
 
         else :

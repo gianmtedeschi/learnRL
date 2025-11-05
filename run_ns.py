@@ -345,16 +345,42 @@ for i in range(args.n_trials):
 
     """Policy"""
     if args.pol == "linear_gaussian":
-        tot_params = s_dim * a_dim
-        pol = GaussianPolicy(
-            parameters=np.zeros(tot_params),
-            dim_state=s_dim,
-            dim_action=a_dim,
-            std_dev=args.std,
-            std_decay=0,
-            std_min=1e-6,
-            multi_linear=MULTI_LINEAR
-        )
+
+        if args.algorithm =="off_policy" and (args.env == "mountain_car_5" or args.env == "mountain_car_4" or args.env == "pendulum") and args.data_processor!="identity":
+
+            net = nn.Sequential(
+            nn.Linear(s_dim, a_dim, bias=False)
+            )
+
+            for m in net:
+                if isinstance(m, nn.Linear):
+                    nn.init.xavier_uniform_(m.weight)
+
+            pol = DeepGaussianPolicy(
+                #parameters= np.load("/home/tedeschi_bpo/learn_RL/results/pendulum_friction/decay/test_tol1e-4{0}_07_14-19_43_PG_200_pendulum_200_099_constant_001_100_noclip__deep_gaussian_3375_std_1_noise_00/trial_0/policy_params.npy"),
+                parameters=None,
+                input_size=s_dim,
+                output_size=a_dim,
+                model=copy.deepcopy(net),
+                std_dev=args.std,
+                #std_decay=5e-2,
+                std_decay=0,
+                std_min=0.25
+            )
+            tot_params = pol.tot_params
+        else:
+            tot_params = s_dim * a_dim
+            pol = GaussianPolicy(
+                parameters=np.zeros(tot_params),
+                dim_state=s_dim,
+                dim_action=a_dim,
+                std_dev=args.std,
+                std_decay=0,
+                std_min=1e-6,
+                multi_linear=MULTI_LINEAR
+            )
+
+
     elif args.pol in ["nn", "deep_gaussian"]:
         net = nn.Sequential(
             nn.Linear(s_dim, args.layers, bias=True),
@@ -368,7 +394,8 @@ for i in range(args.n_trials):
         for m in net:
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
-
+        
+        
         # model_desc = dict(
         #     layers_shape=[(s_dim, args.layers), (args.layers, args.layers), (args.layers, a_dim)]
         # )

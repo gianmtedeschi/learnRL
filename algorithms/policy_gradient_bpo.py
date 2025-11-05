@@ -103,7 +103,7 @@ class PolicyGradientBpo:
         self.dim_action = self.env.action_dim
         if isinstance( self.data_processor, IdentityDataProcessor):
             self.dim_state = self.env.state_dim
-        elif isinstance(self.data_processor, KernelDataProcessor):
+        else:
             self.dim_state = self.data_processor.num_states
         self.parallel_sampling = bool(self.n_jobs != 1)
         self.debug = debug
@@ -233,6 +233,9 @@ class PolicyGradientBpo:
             weights_trajectories = np.exp(logprobs_t_sum - logprobs_b_sum)
          
             coefficients = weights_trajectories * (norm_vector + self.kl_reg)
+
+
+            
             if self.debug :
                 print(f"coefficents for behavioural policy optimization {coefficients}")
                 print(f"Gradient norms: {norm_vector}")
@@ -241,8 +244,12 @@ class PolicyGradientBpo:
             if isinstance(self.policy, GaussianPolicy):
                 print(f"Doing Closed form optimization")
                 num = np.sum(coefficients[..., None] * np.sum(np.squeeze(actions, -1)[...,None] * states, axis = 1), axis = 0)
-                out_prod = np.einsum('ntf,ntg->ntfg', states, states)
-                den = np.sum(coefficients[...,None, None] * np.sum(out_prod, axis = 1),axis = 0)
+
+                #out_prod = np.einsum('ntf,ntg->ntfg', states, states)
+                #den = np.sum(coefficients[...,None, None] * np.sum(out_prod, axis = 1),axis = 0)
+
+                den = np.einsum('n,ntf,ntg->fg', coefficients, states, states)
+
                 lambda_reg = 1e-5 # You can tune this
                 dim = den.shape[0]
                 reg_identity = lambda_reg * np.eye(dim)
