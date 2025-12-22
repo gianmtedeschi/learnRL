@@ -234,19 +234,25 @@ class Continuous_MountainCarSimmEnv_v5(gym.Env):
         # Note that if you use custom reset bounds, it may lead to out-of-bound
         # state/observations.
         if options is None:
-            # random_number_0 = self.np_random.random()
-            # if random_number_0 <= 0.5:
-            #     low, high = np.array([-0.26, -0.02]), np.array([0.26, 0.02])
-            # else :
-            #     random_number = self.np_random.random()
-            #     if random_number <= 0.5:
-            #         low, high = np.array([-1.57, -0.01] ), np.array([-1.05, 0.01])
-            #     #low, high = -0.5 , 0.5
-            #     else:
-            #         low, high = np.array([1.05, -0.01] ), np.array([1.57, 0.01])
+            random_number_0 = self.np_random.random()
+            if random_number_0 <= 0.5:
+                #low, high = np.array([-0.26, -0.02]), np.array([0.26, 0.02])
+                self.state = np.array([0, self.np_random.uniform(low = -0.02, high = 0.02)])
+            else :
+                random_number = self.np_random.random()
+                if random_number <= 0.5:
+                    #low, high = np.array([-1.57, -0.01] ), np.array([-1.05, 0.01])
+                    self.state = np.array([-5*math.pi/12, self.np_random.uniform(low = -0.02, high = 0.02)])
 
-            low, high = np.array([-4.9, -0.02] ), np.array([4.9, 0.02])
-            self.state = self.np_random.uniform(low = low, high = high)
+                else:
+                    #low, high = np.array([1.05, -0.01] ), np.array([1.57, 0.01])
+                    self.state = np.array([5*math.pi/12, self.np_random.uniform(low = -0.02, high = 0.02)])
+
+
+            # low, high = np.array([-4.9, -0.02] ), np.array([4.9, 0.02])
+            # self.state = self.np_random.uniform(low = low, high = high)
+
+
 
         else :
             

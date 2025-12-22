@@ -51,9 +51,9 @@ class PolicyGradientBpo:
             evaluation_batch_size: int = 100,
             kl_reg: float = 0,
             behavioural_std: float = 0.1,
-            max_iter_optimization: int = 500,
+            max_iter_optimization: int = 50,
             tol: float = 1e-4,
-            lr_behavioral: float = 1e-4
+            lr_behavioral: float = 1e-6
 
             
     ) -> None:
@@ -138,7 +138,11 @@ class PolicyGradientBpo:
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(alpha=self.lr)
-        
+
+        self.grad_var = np.zeros(ite, dtype=np.float64)
+        self.states = np.zeros((ite, 5, 100, self.dim_state), dtype = np.float64)
+
+
         return
     
 
@@ -217,7 +221,7 @@ class PolicyGradientBpo:
                 states[j,:,:] = res[j][TrajectoryResults.StateList]
                 actions[j,:,:] = res[j][TrajectoryResults.ActionList]
 
-            print(mask)
+            #print(mask)
                 
             self.costs[i] = np.mean(perf_vector)
             
@@ -231,7 +235,8 @@ class PolicyGradientBpo:
             logprobs_t_sum = np.sum(logprobs_vector_t, axis = 1)
             logprobs_b_sum = np.sum(logprobs_vector_b, axis = 1)
             weights_trajectories = np.exp(logprobs_t_sum - logprobs_b_sum)
-         
+
+            
             coefficients = weights_trajectories * (norm_vector + self.kl_reg)
 
 
@@ -341,6 +346,10 @@ class PolicyGradientBpo:
             
             states = np.zeros((self.defensive_batchsize, self.env.horizon, self.dim_state), dtype = np.float64)
             actions = np.zeros((self.defensive_batchsize, self.env.horizon, self.dim_action), dtype = np.float64)
+
+            # for test
+            states = np.zeros((self.batch_size, self.env.horizon, self.dim_state), dtype = np.float64)
+
             
             
             for j in range(self.batch_size):
@@ -350,6 +359,10 @@ class PolicyGradientBpo:
                 logprobs_vector_t[j, :] = res[j][TrajectoryResults.Logprob_target]
                 logprobs_vector_b[j, :] = res[j][TrajectoryResults.Logprob_behavioural]
                 mask[j, :] = res[j][TrajectoryResults.Mask]
+                states[j,:,:] = res[j][TrajectoryResults.StateList]
+            
+            self.states[i] = states[:5, ::2, :]
+
                 
                 
             for j in range(self.defensive_batchsize):
@@ -402,7 +415,7 @@ class PolicyGradientBpo:
             elif self.estimator_type == "GPOMDP":
                 rolling_weights_log = num_cumsum - den_cumsum
                 self.estimated_gradient = self.update_gpomdp_bpo(
-                    reward_vector=reward_vector, score_vector=score_vector, rolling_weights_log = rolling_weights_log, mask = mask
+                    reward_vector=reward_vector, score_vector=score_vector, rolling_weights_log = rolling_weights_log, mask = mask, i=i
                 )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
@@ -458,7 +471,7 @@ class PolicyGradientBpo:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_trajectory, axis=1) * mask[..., None] #+ 1e-10
+        rolling_scores = np.cumsum(score_trajectory, axis=1) #* mask[..., None] #+ 1e-10
 
         
         if self.baselines == "avg":
@@ -472,6 +485,8 @@ class PolicyGradientBpo:
         reward_trajectory = (reward_vector[...,None] - b[np.newaxis,...]) * rolling_scores
 
         samples = np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1)
+        #samples = np.sum(gamma_seq[np.newaxis, ..., np.newaxis ] * reward_trajectory, axis=1)
+
         return samples
 
         
@@ -480,13 +495,16 @@ class PolicyGradientBpo:
         self, reward_vector: np.array,
         score_vector: np.array,
         rolling_weights_log: np.array,
-        mask : np.array
+        mask : np.array,
+        i: int
         
     ) -> np.array:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_vector, axis=1) * mask[..., None] #+ 1e-10
+        #rolling_scores = np.cumsum(score_vector, axis=1) * mask[..., None] #+ 1e-10
+        rolling_scores = np.cumsum(score_vector, axis=1) + 1e-10
+
         
         rolling_weights = np.exp(rolling_weights_log) 
          
@@ -507,6 +525,9 @@ class PolicyGradientBpo:
             np.sum(gamma_seq[:, np.newaxis]*reward_trajectory, axis = 1 ),
             axis = 0
         )
+
+        self.grad_var[i] = np.trace(np.cov(np.sum(gamma_seq[:, np.newaxis]*reward_trajectory, axis = 1 ), rowvar = False))
+
         if self.debug :
             print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
             print(f"estimated gradient: {self.estimated_gradient}")
@@ -542,6 +563,9 @@ class PolicyGradientBpo:
                 "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
                 "last_theta": np.array(self.thetas, dtype=float).tolist(),
                 "best_perf": float(self.best_performance_theta),
+                "cost": np.array(self.costs, dtype = float).tolist(),
+                "grad_var": np.array(self.grad_var, dtype = float).tolist(),
+                "states" : np.array(self.states, dtype = float).tolist()
             }
 
         # Save the json

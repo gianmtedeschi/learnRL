@@ -112,6 +112,10 @@ class PolicyGradient:
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(alpha=self.lr)
+
+        self.grad_var = np.zeros(ite, dtype=np.float64)
+        self.states = np.zeros((ite, 5, 100, self.dim_state), dtype = np.float64)
+
         return
 
     def learn(self) -> None:
@@ -145,12 +149,16 @@ class PolicyGradient:
             score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim),
                                     dtype=np.float64)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
+            states = np.zeros((self.batch_size, self.env.horizon, self.dim_state), dtype = np.float64)
+
             
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
                 reward_vector[j, :] = res[j][TrajectoryResults.RewList]
                 score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
-            
+                states[j,:,:] = res[j][TrajectoryResults.StateList]
+
+            self.states[i] = states[:5, ::2, :]
             self.performance_idx[i] = np.mean(perf_vector)
 
             # Update best rho
@@ -162,7 +170,7 @@ class PolicyGradient:
                     perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
             elif self.estimator_type == "GPOMDP":
                 self.estimated_gradient = self.update_gpomdp(
-                    reward_vector=reward_vector, score_trajectory=score_vector
+                    reward_vector=reward_vector, score_trajectory=score_vector, i = i
                 )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
@@ -206,7 +214,8 @@ class PolicyGradient:
 
     def update_gpomdp(
             self, reward_vector: np.array,
-            score_trajectory: np.array
+            score_trajectory: np.array,
+            i : int
     ) -> np.array:
         gamma = self.env.gamma
         horizon = self.env.horizon
@@ -226,6 +235,9 @@ class PolicyGradient:
         self.estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
+        
+        self.grad_var[i] = np.trace(np.cov(np.sum(gamma_seq[:, np.newaxis]*reward_trajectory, axis = 1 ), rowvar = False))
+
 
         # print("DEBUG", rolling_scores.shape, b.shape, reward_trajectory.shape, reward_vector.shape, self.estimated_gradient.shape)
         return self.estimated_gradient
@@ -257,6 +269,9 @@ class PolicyGradient:
                 "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
                 "last_theta": np.array(self.thetas, dtype=float).tolist(),
                 "best_perf": float(self.best_performance_theta),
+                "grad_var": np.array(self.grad_var, dtype = float).tolist(),
+                "states" : np.array(self.states, dtype = float).tolist()
+
             }
 
         # Save the json

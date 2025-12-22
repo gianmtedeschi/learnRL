@@ -195,7 +195,7 @@ class TrajectorySampler:
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action
-            state, rew, done, _ = self.env.step(a)
+            _, rew, done, _ = self.env.step(a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
@@ -216,7 +216,7 @@ class TrajectorySampler:
         if split:
             return [perf, rewards, scores, states]
         else:  
-            return [perf, rewards, scores, mask]
+            return [perf, rewards, scores, mask, states]
         
     def collect_trajectory_forBPO(
             self, params_target: np.array = None,
@@ -307,7 +307,6 @@ class TrajectorySampler:
                     logprobs_t[t+1:] = 0
                     logprobs_b[t+1:] = 0
                     mask[t+1:] = 0
-                    # dovrei gestire le logprob in qualche moddo, tipo -inf ? però poi quando li sommo è un problema, ha più senso 0
                     
                 break
         

@@ -220,6 +220,25 @@ parser.add_argument(
     default = 32
 )
 
+parser.add_argument(
+    "--lr_opt_behavioural",
+    help = "lr for behavioural policy optimization through minimation of crossentropy loss",
+    type = float,
+    default = 1e-4
+)
+
+parser.add_argument(
+    "--ite_opt_behavioural",
+    help = "max iteerations for behavioural policy optimization through minimation of crossentropy loss",
+    type = int,
+    default = 200
+)
+parser.add_argument(
+    "--params_dir",
+    help="Directory from which load policy parameters.",
+    type=str,
+    default=""
+)
 
 args = parser.parse_args()
 
@@ -357,8 +376,8 @@ for i in range(args.n_trials):
                     nn.init.xavier_uniform_(m.weight)
 
             pol = DeepGaussianPolicy(
-                #parameters= np.load("/home/tedeschi_bpo/learn_RL/results/pendulum_friction/decay/test_tol1e-4{0}_07_14-19_43_PG_200_pendulum_200_099_constant_001_100_noclip__deep_gaussian_3375_std_1_noise_00/trial_0/policy_params.npy"),
-                parameters=None,
+                parameters = np.load(args.params_dir),
+                #parameters=None,
                 input_size=s_dim,
                 output_size=a_dim,
                 model=copy.deepcopy(net),
@@ -370,8 +389,9 @@ for i in range(args.n_trials):
             tot_params = pol.tot_params
         else:
             tot_params = s_dim * a_dim
+            params = np.load(args.params_dir) if args.params_dir else np.zeros(tot_params)
             pol = GaussianPolicy(
-                parameters=np.zeros(tot_params),
+                parameters= params,
                 dim_state=s_dim,
                 dim_action=a_dim,
                 std_dev=args.std,
@@ -421,7 +441,7 @@ for i in range(args.n_trials):
 
         elif args.pol == "deep_gaussian":
             pol = DeepGaussianPolicy(
-                #parameters= np.load("/home/tedeschi_bpo/learn_RL/results/pendulum_friction/decay/test_tol1e-4{0}_07_14-19_43_PG_200_pendulum_200_099_constant_001_100_noclip__deep_gaussian_3375_std_1_noise_00/trial_0/policy_params.npy"),
+                #parameters= np.load(args.params_dir),
                 parameters=None,
                 input_size=s_dim,
                 output_size=a_dim,
@@ -464,8 +484,10 @@ for i in range(args.n_trials):
             seed=seed,
             kl_reg = args.kl,
             behavioural_std = args.behavioural_std,
-            defensive_batch_size = args.defensive_batchsize
-            # defensive batchsize default
+            defensive_batch_size = args.defensive_batchsize,
+            max_iter_optimization = args.ite_opt_behavioural,
+            lr_behavioral = args.lr_opt_behavioural
+
         )
         alg = PolicyGradientBpo(**alg_parameters)
 
