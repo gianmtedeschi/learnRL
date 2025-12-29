@@ -85,7 +85,8 @@ def pg_sampling_worker_bpo(
         params: np.ndarray = None,
         params_b: np.ndarray = None,
         starting_state: np.ndarray = None,
-        seed: int = 0
+        seed: int = 0,
+        dummy_behavioral  = False
 ) -> list:
     """Worker collecting a single trajectory.
 
@@ -106,7 +107,7 @@ def pg_sampling_worker_bpo(
     Returns:
         list: [performance, reward, scores]
     """
-    trajectory_sampler = TrajectorySampler(env=env, pol=pol, pol_b = pol_b, data_processor=dp)
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, pol_b = pol_b, data_processor=dp, dummy_behavioral = dummy_behavioral)
     res = trajectory_sampler.collect_trajectory_forBPO(params_target = params, params_behavioural = params_b, starting_state=starting_state, seed=seed)
     
     return res
@@ -117,7 +118,8 @@ class TrajectorySampler:
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
             pol_b: BasePolicy = None,
-            data_processor: BaseProcessor = None
+            data_processor: BaseProcessor = None,
+            dummy_behavioral = False
     ) -> None:
         err_msg = "[PGTrajectorySampler] no environment provided!"
         assert env is not None, err_msg
@@ -136,6 +138,8 @@ class TrajectorySampler:
             self.s_dim = data_processor.num_states
         
         self.pol_b = pol_b
+
+        self.dummy_behavioral = dummy_behavioral
 
         return
 
@@ -275,15 +279,27 @@ class TrajectorySampler:
 
             # transform the state
             features = self.dp.transform(state=state)
+            
+            if self.dummy_behavioral:
+                features_plus = np.append(features, 1)
 
             # select the action
-            a = self.pol_b.draw_action(state=features)
+            if self.dummy_behavioral:
+                a = self.pol_b.draw_action(state=features_plus)
+            else:
+                a = self.pol_b.draw_action(state=features)
+
             #a = np.clip(a, self.env.action_space.low, self.env.action_space.high)
 
             score = self.pol.compute_score(state=features, action=a)  
             
             logprob_t = self.pol.compute_logprob(features, a)
-            logprob_b = self.pol_b.compute_logprob(features, a)
+            if self.dummy_behavioral:
+                logprob_b = self.pol_b.compute_logprob(features_plus, a)
+            else:
+                logprob_b = self.pol_b.compute_logprob(features, a)
+
+
 
             # play the action
             _, rew, done, _ = self.env.step(a)

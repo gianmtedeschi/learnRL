@@ -53,7 +53,8 @@ class PolicyGradientBpo:
             behavioural_std: float = 0.1,
             max_iter_optimization: int = 50,
             tol: float = 1e-4,
-            lr_behavioral: float = 1e-6
+            lr_behavioral: float = 1e-6,
+            dummy_behavioral = False
 
             
     ) -> None:
@@ -73,7 +74,11 @@ class PolicyGradientBpo:
         err_msg = "[PG] initial_theta has not been specified!"
         assert initial_theta is not None, err_msg
         self.thetas = np.array(initial_theta)
-        self.thetas_behavioural = np.array(initial_theta)
+        self.dummy_behavioral = dummy_behavioral
+        if self.dummy_behavioral:
+            self.thetas_behavioural = np.append(np.array(initial_theta), 0)
+        else:
+            self.thetas_behavioural = np.array(initial_theta)
         self.dim = len(self.thetas)
 
         err_msg = "[PG] env is None."
@@ -84,6 +89,15 @@ class PolicyGradientBpo:
         assert policy is not None, err_msg
         self.policy = policy
         self.policy_behavioural = copy.deepcopy(self.policy)
+        # MOMENTANEO, DA AGGIUSTARE
+        if self.dummy_behavioral:
+            self.policy_behavioural.dim_state = self.policy_behavioural.dim_state + 1
+
+        self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas_behavioural))
+
+            
+
+
 
         err_msg = "[PG] data processor is None."
         assert data_processor is not None, err_msg
@@ -118,7 +132,11 @@ class PolicyGradientBpo:
         self.lr_behavioral = lr_behavioral
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
-        self.theta_behavioural_history = np.zeros((self.ite, self.dim), dtype = np.float64)
+        #attenzione modificato
+        if self.dummy_behavioral :
+            self.theta_behavioural_history = np.zeros((self.ite, self.dim +1), dtype = np.float64)
+        else:
+            self.theta_behavioural_history = np.zeros((self.ite, self.dim ), dtype = np.float64)
         self.time = 0
         self.performance_idx = np.zeros(ite, dtype=np.float64)
         self.estimated_gradient = np.zeros(ite, dtype=np.float64)
@@ -184,6 +202,7 @@ class PolicyGradientBpo:
                     dp=copy.deepcopy(self.data_processor),
                     params=copy.deepcopy(self.thetas),
                     params_b = copy.deepcopy(self.thetas_behavioural),
+                    dummy_behavioral = self.dummy_behavioral
                 )
 
                 # build the parallel functions
@@ -248,20 +267,39 @@ class PolicyGradientBpo:
             
             if isinstance(self.policy, GaussianPolicy):
                 print(f"Doing Closed form optimization")
-                num = np.sum(coefficients[..., None] * np.sum(np.squeeze(actions, -1)[...,None] * states, axis = 1), axis = 0)
 
-                #out_prod = np.einsum('ntf,ntg->ntfg', states, states)
-                #den = np.sum(coefficients[...,None, None] * np.sum(out_prod, axis = 1),axis = 0)
+                if not self.dummy_behavioral:
+                    num = np.sum(coefficients[..., None] * np.sum(np.squeeze(actions, -1)[...,None] * states, axis = 1), axis = 0)
 
-                den = np.einsum('n,ntf,ntg->fg', coefficients, states, states)
+                    #out_prod = np.einsum('ntf,ntg->ntfg', states, states)
+                    #den = np.sum(coefficients[...,None, None] * np.sum(out_prod, axis = 1),axis = 0)
 
-                lambda_reg = 1e-5 # You can tune this
-                dim = den.shape[0]
-                reg_identity = lambda_reg * np.eye(dim)
-                #self.thetas_behavioural = num @ np.linalg.inv(den + reg_identity)
-                self.thetas_behavioural = np.linalg.solve(den + reg_identity, num)
-                self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas_behavioural))
-                print(f"Optimal behavioural policy parameters : {self.thetas_behavioural}")
+                    den = np.einsum('n,ntf,ntg->fg', coefficients, states, states)
+
+                    lambda_reg = 1e-9 # You can tune this
+                    dim = den.shape[0]
+                    reg_identity = lambda_reg * np.eye(dim)
+                    #self.thetas_behavioural = num @ np.linalg.inv(den + reg_identity)
+                    self.thetas_behavioural = np.linalg.solve(den + reg_identity, num)
+                    self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas_behavioural))
+                    print(f"Optimal behavioural policy parameters : {self.thetas_behavioural}")
+                
+                else:
+
+                    N, T, d = states.shape
+                    bias = np.ones((N, T, 1))
+                    states_aug = np.concatenate([states, bias], axis=-1)
+                    num = np.sum(coefficients[..., None] * np.sum(np.squeeze(actions, -1)[...,None] * states_aug * mask[...,None], axis = 1), axis = 0)
+
+                    den = np.einsum('n,ntf,ntg->fg', coefficients, states_aug * mask[..., None], states_aug * mask[..., None])
+                    lambda_reg = 1e-9 # You can tune this
+                    dim = den.shape[0]
+                    reg_identity = lambda_reg * np.eye(dim)
+                    self.thetas_behavioural = np.linalg.solve(den + reg_identity, num)
+                    self.policy_behavioural.set_parameters(copy.deepcopy(self.thetas_behavioural))
+                    print(f"Optimal behavioural policy parameters : {self.thetas_behavioural}")
+ 
+
             else:
                 coefficients = torch.as_tensor(coefficients, dtype = torch.float64)
                 mask = torch.as_tensor(mask, dtype = torch.float64)
@@ -301,7 +339,8 @@ class PolicyGradientBpo:
                         pol_b= copy.deepcopy(self.policy_behavioural),
                         dp=copy.deepcopy(self.data_processor),
                         params=copy.deepcopy(self.thetas),
-                        params_b = copy.deepcopy(self.thetas_behavioural)
+                        params_b = copy.deepcopy(self.thetas_behavioural),
+                        dummy_behavioral = self.dummy_behavioral
                     )
                     
                     # sampling from target
@@ -561,6 +600,7 @@ class PolicyGradientBpo:
                 "performance": np.array(self.performance_idx, dtype=float).tolist(),
                 "best_theta": np.array(self.best_theta, dtype=float).tolist(),
                 "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
+                "thetas_behavioral_history": np.array(self.theta_behavioural_history, dtype = float).tolist(),
                 "last_theta": np.array(self.thetas, dtype=float).tolist(),
                 "best_perf": float(self.best_performance_theta),
                 "cost": np.array(self.costs, dtype = float).tolist(),

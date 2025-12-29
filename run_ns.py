@@ -47,6 +47,13 @@ parser.add_argument(
     choices=["linear_gaussian", "linear", "nn", "deep_gaussian"]
 )
 parser.add_argument(
+    "--pol_behavioral",
+    help="The policy behavioral used.",
+    type=str,
+    default="deep_gaussian",
+    choices=["linear_gaussian", "linear", "nn", "deep_gaussian"]
+)
+parser.add_argument(
     "--std",
     help="The exploration amount.",
     type=float,
@@ -206,6 +213,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--data_processor_behavioral",
+    help="state transformation to apply before policy step",
+    type= str,
+    default= 'identity',
+    choices= ['identity' , 'rbf', 'rbf_mcar', 'normalization', 'rbf_mcar_5']
+)
+
+parser.add_argument(
     "--algorithm",
     help = " learning algorithm, off policy or on policy",
     type = str,
@@ -239,6 +254,14 @@ parser.add_argument(
     type=str,
     default=""
 )
+
+parser.add_argument(
+    "--dummy_behavioral",
+    action="store_true",
+    default=False,
+)
+
+
 
 args = parser.parse_args()
 
@@ -415,22 +438,6 @@ for i in range(args.n_trials):
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
         
-        
-        # model_desc = dict(
-        #     layers_shape=[(s_dim, args.layers), (args.layers, args.layers), (args.layers, a_dim)]
-        # )
-
-
-
-        # PER PENDOLO PER USARE LA LINEAR MA FARE OPTIMIZTION NON IN FORMA CHIUSA
-        # net = nn.Sequential(
-        #     nn.Linear(s_dim, a_dim, bias=False),
-        # )
-
-        # model_desc = dict(
-        #     layers_shape=[(s_dim, a_dim)]
-        # )
-
         if args.pol == "nn":
             pol = NeuralNetworkPolicy(
                 parameters=None,
@@ -441,8 +448,8 @@ for i in range(args.n_trials):
 
         elif args.pol == "deep_gaussian":
             pol = DeepGaussianPolicy(
-                #parameters= np.load(args.params_dir),
-                parameters=None,
+                parameters= np.load(args.params_dir),
+                #parameters=None,
                 input_size=s_dim,
                 output_size=a_dim,
                 model=copy.deepcopy(net),
@@ -486,7 +493,9 @@ for i in range(args.n_trials):
             behavioural_std = args.behavioural_std,
             defensive_batch_size = args.defensive_batchsize,
             max_iter_optimization = args.ite_opt_behavioural,
-            lr_behavioral = args.lr_opt_behavioural
+            lr_behavioral = args.lr_opt_behavioural,
+            dummy_behavioral = args.dummy_behavioral
+
 
         )
         alg = PolicyGradientBpo(**alg_parameters)
