@@ -42,7 +42,7 @@ class ParameterPolicyGradientSplit(PolicyGradient):
             n_jobs: int = 1,
             max_splits: int = 100,
             baselines: str = None,
-            alpha: float = 0.1
+            alpha: float = 0.1,
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG_split] lr must be positive!"
@@ -103,8 +103,10 @@ class ParameterPolicyGradientSplit(PolicyGradient):
         #     env=self.env, pol=self.policy, data_processor=self.data_processor
         # )
 
+        self.n_jobs = n_jobs
+
         self.sampler = TrajectorySampler(
-            env=self.env, pol=self.policy, data_processor=self.data_processor
+            env=self.env, pol=self.policy, data_processor=self.data_processor, n_jobs=self.n_jobs
         )
 
         # init the theta history
@@ -137,11 +139,12 @@ class ParameterPolicyGradientSplit(PolicyGradient):
         gradient_sum, gradient_mean = 0, 0
 
         for i in tqdm(range(self.ite)):
-            res = []
+            #res = []
 
-            for j in range(self.batch_size):
-                tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.rho), split=True)
-                res.append(tmp_res)
+            #for j in range(self.batch_size):
+            #    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.rho), split=True)
+            #    res.append(tmp_res)
+            res = self.sampler.collect_trajectories(params=copy.deepcopy(self.rho), split=True, num_trajectories=self.batch_size)
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)

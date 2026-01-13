@@ -96,8 +96,9 @@ class PolicyGradient:
         self.performance_idx = np.zeros(ite, dtype=np.float64)
         self.best_theta = np.zeros(self.dim, dtype=np.float64)
         self.best_performance_theta = -np.inf
+        self.n_jobs = n_jobs
         self.sampler = TrajectorySampler(
-            env=self.env, pol=self.policy, data_processor=self.data_processor
+            env=self.env, pol=self.policy, data_processor=self.data_processor, n_jobs=self.n_jobs
         )
         self.deterministic_curve = np.zeros(self.ite)
 
@@ -113,10 +114,12 @@ class PolicyGradient:
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            res = []
-            for j in range(self.batch_size):
-                tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
-                res.append(tmp_res)
+            #res = []
+            #for j in range(self.batch_size):
+            #    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
+            #    res.append(tmp_res)
+
+            res = self.sampler.collect_trajectories(params=copy.deepcopy(self.thetas), num_trajectories=self.batch_size)
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)

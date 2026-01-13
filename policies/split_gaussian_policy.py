@@ -24,7 +24,8 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
             dim_action: int = 1,
             deterministic: bool = False,
             linear: bool = False,
-            history: BinaryTree = BinaryTree()
+            history: BinaryTree = BinaryTree(),
+            max_splits: int = 1000
 
     ) -> None:
         # Superclass initialization
@@ -46,7 +47,7 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
         self.std_min = std_min
 
         # self.history = history
-        self.history = BinaryTree()
+        self.history = BinaryTree(nodes_num=2*max_splits + 1)
         self.tot_params = dim_action
         self.deterministic = deterministic
         self.linear = linear

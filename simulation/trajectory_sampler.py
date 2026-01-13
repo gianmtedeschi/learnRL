@@ -6,6 +6,7 @@ from policies import BasePolicy
 from data_processors import BaseProcessor
 import numpy as np
 import copy
+import joblib
 from common.utils import *
 
 # class
@@ -13,7 +14,8 @@ class TrajectorySampler:
     def __init__(
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
-            data_processor: BaseProcessor = None
+            data_processor: BaseProcessor = None,
+            n_jobs : int = 1
     ) -> None:
         err_msg = "[PGTrajectorySampler] no environment provided!"
         assert env is not None, err_msg
@@ -26,8 +28,29 @@ class TrajectorySampler:
         err_msg = "[PGTrajectorySampler] no data_processor provided!"
         assert data_processor is not None, err_msg
         self.dp = data_processor
+        self.n_jobs = n_jobs
+
 
         return
+
+    def collect_trajectories(self, params: np.array = None, starting_state=None, split=False, num_trajectories=1) -> list:
+        """
+        Collect multiple trajectories in parallel.
+
+        Args:
+            params (np.array): the current sampling of theta values
+            starting_state (any): the starting state for the iterations
+            split (bool): whether to use split scores
+            num_trajectories (int): number of trajectories to collect
+
+        Returns:
+            list: List of collected trajectories
+        """
+        results = joblib.Parallel(n_jobs=self.n_jobs)(
+            joblib.delayed(self.collect_trajectory)(params, starting_state, split)
+            for _ in range(num_trajectories)
+        )
+        return results
 
     def collect_trajectory(
             self, params: np.array = None, starting_state=None, split=False

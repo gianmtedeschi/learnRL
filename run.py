@@ -13,7 +13,7 @@ parser.add_argument(
     "--dir",
     help="Directory in which save the results.",
     type=str,
-    default=""
+    default="./results/"
 )
 parser.add_argument(
     "--ite",
@@ -25,7 +25,7 @@ parser.add_argument(
     "--alg",
     help="The algorithm to use.",
     type=str,
-    default="pg",
+    default="agaps",
     choices=["pg", "agaps", "pgaps"]
 )
 parser.add_argument(
@@ -45,7 +45,7 @@ parser.add_argument(
     "--pol",
     help="The policy used.",
     type=str,
-    default="deep_gaussian",
+    default="split_gaussian",
     choices=["gaussian", "split_gaussian", "deep_gaussian"]
 )
 parser.add_argument(
@@ -99,6 +99,14 @@ parser.add_argument(
     type=int,
     default=1
 )
+
+parser.add_argument(
+    "--n_jobs",
+    help="Number of parallel jobs.",
+    type=int,
+    default=-1
+)
+
 parser.add_argument(
     "--lq_state_dim",
     help="State dimension for the LQR environment.",
@@ -115,7 +123,7 @@ parser.add_argument(
     "--verbose",
     help="Print debug information.",
     type=int,
-    default=0
+    default=1
 )
 parser.add_argument(
     "--baseline",
@@ -231,7 +239,8 @@ for i in range(args.n_trials):
             std_decay=0,
             std_min=1e-6,
             deterministic=args.deterministic,
-            linear=args.linear
+            linear=args.linear,
+            max_splits=args.max_splits
         )
     elif args.pol in ["nn", "deep_gaussian"]:
         net = nn.Sequential(
@@ -295,8 +304,8 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=args.verbose,
             checkpoint_freq=50,
-            n_jobs=1,
-            baselines=args.baseline
+            baselines=args.baseline,
+            n_jobs=args.n_jobs
         )
         alg = PolicyGradient(**alg_parameters)
     elif args.alg == "agaps":
@@ -314,10 +323,10 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=args.verbose,
             checkpoint_freq=50,
-            n_jobs=1,
             baselines=args.baseline,
             alpha=args.alpha,
-            max_splits=args.max_splits
+            max_splits=args.max_splits,
+            n_jobs=args.n_jobs
         )
         alg = PolicyGradientSplit(**alg_parameters)
     elif args.alg == "pgaps":
@@ -334,10 +343,10 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=args.verbose,
             checkpoint_freq=50,
-            n_jobs=1,
+            n_jobs=args.n_jobs,
             baselines=args.baseline,
             alpha=args.alpha,
-            max_splits=args.max_splits
+            max_splits=args.max_splits,
         )
         alg = ParameterPolicyGradientSplit(**alg_parameters)
     else:

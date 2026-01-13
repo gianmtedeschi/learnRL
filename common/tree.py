@@ -11,11 +11,11 @@ class Node:
 
 
 class BinaryTree:
-    def __init__(self):
+    def __init__(self, nodes_num=1000):
         # array of all nodes
-        self.nodes = np.array([Node(i) for i in range(1000)]) 
+        self.nodes = np.array([Node(i) for i in range(nodes_num)])
         # array of boolean values, )True if the node is a leaf
-        self.is_leaf = np.zeros(1000, dtype=bool)
+        self.is_leaf = np.zeros(nodes_num, dtype=bool)
         # counter of used nodes in the nodes structure
         self.used = 0
 

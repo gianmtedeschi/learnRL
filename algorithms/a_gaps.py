@@ -15,6 +15,7 @@ import io
 from tqdm import tqdm
 import copy
 from adam.adam import Adam
+import time
 
 
 import scipy.stats as stats
@@ -95,7 +96,7 @@ class PolicyGradientSplit(PolicyGradient):
         self.best_theta = np.zeros(self.dim, dtype=np.float64)
         self.best_performance_theta = -np.inf
         self.sampler = TrajectorySampler(
-            env=self.env, pol=self.policy, data_processor=self.data_processor
+            env=self.env, pol=self.policy, data_processor=self.data_processor, n_jobs=self.n_jobs
         )
 
         # init the theta history
@@ -128,11 +129,13 @@ class PolicyGradientSplit(PolicyGradient):
         gradient_sum, gradient_mean = 0, 0
 
         for i in tqdm(range(self.ite)):
-            res = []
+            #res = []
 
-            for j in range(self.batch_size):
-                tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas), split=True)
-                res.append(tmp_res)
+            #for j in range(self.batch_size):
+            #    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas), split=True)
+            #    res.append(tmp_res)
+            res = self.sampler.collect_trajectories(params=copy.deepcopy(self.thetas), split=True, num_trajectories=self.batch_size)
+
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)
@@ -183,7 +186,7 @@ class PolicyGradientSplit(PolicyGradient):
                 gradient_sum += estimated_gradient
                 gradient_mean = gradient_sum/(i+1)
 
-                self.update_parameters(estimated_gradient)
+                self.update_parameters(estimated_gradient, save_png= self.time % 50 == 0 or self.time == self.ite -1)
                 # print("Gradient:"   , estimated_gradient)
 
             else:
@@ -230,7 +233,7 @@ class PolicyGradientSplit(PolicyGradient):
 
         return
 
-    def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
+    def split_old(self, score_vector, state_vector, reward_vector, split_state) -> list:
         traj = []
     
         closest_leaf = self.policy.history.find_region_leaf(split_state)
@@ -293,15 +296,94 @@ class PolicyGradientSplit(PolicyGradient):
         traj = [traj_l, traj_r]
         return [estimated_gradient, reward_trajectory, new_thetas, traj]
 
+    def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
+        closest_leaf = self.policy.history.find_region_leaf(split_state)
+        lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, self.dim_state)
+        upper_vertex = self.policy.history.get_upper_vertex(closest_leaf, self.dim_state)
+
+        # Define Split Boundaries
+        left_upper = upper_vertex.copy()
+        left_upper[int(split_state[0])] = split_state[1]
+
+        right_lower = lower_vertex.copy()
+        right_lower[int(split_state[0])] = split_state[1]
+
+        left_lower = lower_vertex
+        right_upper = upper_vertex
+
+        states = np.asarray(state_vector)
+
+        mask_left = np.all((states > left_lower) & (states <= left_upper), axis=2)
+        mask_right = np.all((states > right_lower) & (states <= right_upper), axis=2)
+
+        score_left = np.zeros((self.batch_size, self.env.horizon, self.env.action_dim), dtype=np.float64)
+        score_right = np.zeros((self.batch_size, self.env.horizon, self.env.action_dim), dtype=np.float64)
+
+        score_left[mask_left] = score_vector[mask_left]
+        score_right[mask_right] = score_vector[mask_right]
+
+        steps_per_traj_l = np.sum(mask_left, axis=1)
+        steps_per_traj_r = np.sum(mask_right, axis=1)
+
+        reward_reshaped = reward_vector[..., None]
+
+        reward_trajectory_left = np.sum(np.cumsum(score_left, axis=1) * reward_reshaped, axis=1)
+        reward_trajectory_right = np.sum(np.cumsum(score_right, axis=1) * reward_reshaped, axis=1)
+
+        estimated_gradient_left = np.mean(reward_trajectory_left, axis=0)
+        estimated_gradient_right = np.mean(reward_trajectory_right, axis=0)
+
+        estimated_gradient = [estimated_gradient_left, estimated_gradient_right]
+        reward_trajectory = [reward_trajectory_left, reward_trajectory_right]
+
+        new_thetas = [
+            self.update_parameters(estimated_gradient_left, local=True, split_state=split_state),
+            self.update_parameters(estimated_gradient_right, local=True, split_state=split_state)
+        ]
+
+        traj_l_total = np.sum(steps_per_traj_l > steps_per_traj_r)
+        traj_r_total = np.sum(steps_per_traj_l <= steps_per_traj_r)
+
+        traj = [traj_l_total, traj_r_total]
+
+        return [estimated_gradient, reward_trajectory, new_thetas, traj]
+
     def learn_split(self, score_vector, state_vector, reward_vector, axis) -> None:
         splits = {}
 
         for i in range(len(self.split_grid)):
+            #measure execution time
+            #start_time = time.time()
+            #res_old = self.split_old(score_vector, state_vector, reward_vector, np.array([axis, self.split_grid[i][axis]]))
+            #tot_time = time.time() - start_time
+            #print("Old split time: %s seconds " % tot_time)
+            #start_time = time.time()
             res = self.split(score_vector, state_vector, reward_vector, np.array([axis, self.split_grid[i][axis]]))
+            #tot_time = time.time() - start_time
+            #print("New split time: %s seconds" % tot_time)
+            #reward_trajectory_old = res_old[SplitResults.RewardTrajectories]
+            #estimated_gradient_old = res_old[SplitResults.Gradient]
+            #thetas_old = res_old[SplitResults.SplitThetas]
 
             reward_trajectory = res[SplitResults.RewardTrajectories]
             estimated_gradient = res[SplitResults.Gradient]
             thetas = res[SplitResults.SplitThetas]
+
+            # check thetas
+            #assert len(thetas) == len(thetas_old)
+            #for k in range(len(thetas)):
+            #    assert (thetas[k] == thetas_old[k]).all()
+
+            # check estimated gradient
+            #assert len(estimated_gradient) == len(estimated_gradient_old)
+            #for q in range(len(estimated_gradient)):
+            #    assert (estimated_gradient[q] == estimated_gradient_old[q]).all()
+
+            #assert len(reward_trajectory) == len(reward_trajectory_old)
+            #for z in range(len(reward_trajectory)):
+            #    for k in range(len(reward_trajectory[z])):
+            #        assert (res[SplitResults.RewardTrajectories][z][k] == res_old[SplitResults.RewardTrajectories][z][
+            #            k]).all()
 
             gradient_norm = np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1])
 
@@ -348,7 +430,7 @@ class PolicyGradientSplit(PolicyGradient):
             print("No split found!")
             self.split_done = False
 
-    def update_parameters(self, estimated_gradient, local=False, split_state=None):
+    def update_parameters(self, estimated_gradient, local=False, split_state=None, save_png=True):
         new_theta = None
         coord = None
         old_theta = self.thetas
@@ -372,7 +454,8 @@ class PolicyGradientSplit(PolicyGradient):
         else:
             self.thetas = new_theta
             self.policy.history.update_all_leaves(self.thetas)
-            self.policy.history.to_png(self.directory + "/policy_tree")
+            if save_png:
+                self.policy.history.to_png(self.directory + "/policy_tree")
 
 ############################################################################################################
     def compute_p(self, left, right):

@@ -28,6 +28,7 @@ All you need is in `run.py`, which requires several parameters:
 - "--n_trials": specifies how many run of the same experiments has to be done.
 - "--verbose": print debug information.
 - "--baseline": specifies which baselinse adopt
+- "--n_jobs": specifies how many parallel jobs to use.
 
 Only for the GAPS algorithm:
 - "--alpha": specifies the alpha parameter for the split check criteria;
