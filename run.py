@@ -150,6 +150,13 @@ parser.add_argument(
     default=False,
 )
 
+parser.add_argument(
+    "--n_jobs",
+    help="Number of parallel jobs for sampling and computation.",
+    type=int,
+    default=1,
+)
+
 
 
 
@@ -212,7 +219,7 @@ for i in range(args.n_trials):
     if args.pol == "gaussian":
         tot_params = s_dim * a_dim
         pol = GaussianPolicy(
-            parameters=np.ones(tot_params),
+            parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
             std_dev=args.std,
@@ -223,7 +230,7 @@ for i in range(args.n_trials):
     elif args.pol == "split_gaussian":
         tot_params = a_dim
         pol = SplitGaussianPolicy(
-            parameters=np.ones(tot_params),
+            parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
             std_dev=args.std,
@@ -247,7 +254,7 @@ for i in range(args.n_trials):
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
             estimator_type=args.estimator,
-            initial_theta=[0] * tot_params,
+            initial_theta=pol.parameters,
             ite=args.ite,
             batch_size=args.batch,
             env=env,
@@ -256,8 +263,9 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=args.verbose,
             checkpoint_freq=50,
-            n_jobs=1,
-            baselines=args.baseline
+            n_jobs=args.n_jobs,
+            baselines=args.baseline,
+            seed=i
         )
         alg = PolicyGradient(**alg_parameters)
     elif args.alg == "agaps":
@@ -265,7 +273,7 @@ for i in range(args.n_trials):
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
             estimator_type=args.estimator,
-            initial_theta=[0] * tot_params,
+            initial_theta=pol.parameters,
             ite=args.ite,
             batch_size=args.batch,
             env=env,
@@ -274,10 +282,11 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=args.verbose,
             checkpoint_freq=50,
-            n_jobs=1,
+            n_jobs=args.n_jobs,
             baselines=args.baseline,
             alpha=args.alpha,
-            max_splits=args.max_splits
+            max_splits=args.max_splits,
+            seed=i
         )
         alg = PolicyGradientSplit(**alg_parameters)
     elif args.alg == "pgaps":
@@ -285,7 +294,7 @@ for i in range(args.n_trials):
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
             estimator_type=args.estimator,
-            initial_rho=[0] * tot_params,
+            initial_rho=pol.parameters,
             ite=args.ite,
             batch_size=args.batch,
             env=env,

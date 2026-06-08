@@ -51,6 +51,7 @@ def pg_sampling_worker(
         dp: BaseProcessor = None,
         params: np.ndarray = None,
         starting_state: np.ndarray = None,
+        split: bool = False,
         seed: int = 0
 ) -> list:
     """Worker collecting a single trajectory.
@@ -73,8 +74,48 @@ def pg_sampling_worker(
         list: [performance, reward, scores]
     """
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
-    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, seed=seed)
-    
+    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, split=split, seed=seed)
+
+    return res
+
+def pgpe_sampling_worker(
+        env: BaseEnv = None,
+        pol: BasePolicy = None,
+        dp: BaseProcessor = None,
+        params: np.array = None,
+        episodes_per_theta: int = None,
+        n_jobs: int = None
+) -> np.array:
+    """Worker collecting trajectories for muliple sampling of parameters from the hyperpolicy.
+
+    Args:
+        env (BaseEnv, optional): the env to use. Defaults to None.
+        
+        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        
+        dp (BaseProcessor, optional): the data processor to use. 
+        Defaults to None.
+        
+        params (np.array, optional): the parameter of the hyper.policy. 
+        Defaults to None.
+        
+        episodes_per_theta (int, optional): how many episodes to evaluate for 
+        each sampled parameter. Defaults to None.
+        
+        n_jobs (int, optional): how many parallel trajectories to evaluate 
+        in parallel. Defaults to None.
+
+    Returns:
+        np.array: [parameters, performance]
+    """
+    parameter_sampler = ParameterSampler(
+        env=env,
+        pol=pol,
+        data_processor=dp,
+        episodes_per_theta=episodes_per_theta,
+        n_jobs=n_jobs
+    )
+    res = parameter_sampler.collect_trajectories(params=params)
     return res
 
 # sampler class for action-based methods
@@ -252,7 +293,8 @@ class ParameterSampler:
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
             data_processor: BaseProcessor = None,
-            episodes_per_theta: int = 1
+            episodes_per_theta: int = 1,
+            n_jobs: int = 1
     ) -> None:
         """
         Summary:
@@ -285,6 +327,7 @@ class ParameterSampler:
         self.dp = data_processor
 
         self.episodes_per_theta = episodes_per_theta
+        self.n_jobs = n_jobs
         self.trajectory_sampler = TrajectorySampler(
             env=self.env,
             pol=self.pol,
@@ -304,38 +347,83 @@ class ParameterSampler:
         Returns:
             list: [params, performance]
         """
-        # sample a parameter configuration
-        dim = len(params)
-        thetas = np.zeros(dim, dtype=np.float64)
-
-        # if we are not using gaps sample for pgpe
-        if not gaps:
-            thetas = np.random.normal(
-                params[RhoElem.MEAN], RhoElem.STD)
-
-        # collect performances over the sampled parameter configuration
         raw_res = []
-        for i in range(100):
+        sampled_thetas = []
+
+        for _ in range(self.episodes_per_theta):
             if gaps:
-                thetas = np.random.normal(params, self.pol.std_dev)
-            raw_res.append(self.trajectory_sampler.collect_trajectory(
-                params=thetas, starting_state=None)
+                theta = np.random.normal(params, self.pol.std_dev)
+                res = self.trajectory_sampler.collect_trajectory(
+                    params=theta,
+                    starting_state=None,
+                    split=True
+                )
+            else:
+                theta = np.random.normal(params[RhoElem.MEAN], params[RhoElem.STD])
+                res = self.trajectory_sampler.collect_trajectory(
+                    params=theta,
+                    starting_state=None,
+                    split=False
+                )
+
+            sampled_thetas.append(theta)
+            raw_res.append(res)
+
+        perf_res = np.zeros(self.episodes_per_theta, dtype=np.float64)
+        score_res = []
+        state_res = []
+        for i, elem in enumerate(raw_res):
+            perf_res[i] = elem[TrajectoryResults.PERF]
+            score_res.append(elem[TrajectoryResults.ScoreList])
+            if gaps:
+                state_res.append(elem[TrajectoryResults.StateList])
+
+        score_res = np.array(score_res, dtype=np.float64)
+        if gaps:
+            state_res = np.array(state_res, dtype=np.float64)
+        else:
+            state_res = None
+
+        return [np.array(sampled_thetas, dtype=np.float64), perf_res, score_res, state_res]
+
+    def collect_trajectories(self, params: np.array) -> list:
+        """
+        Summary:
+            Collect trajectories for one parameter sampled from a hyper-policy.
+
+        Args:
+            params (np.array): hyper-policy configuration [means, stds].
+
+        Returns:
+            list: [sampled_theta, trajectory_performances]
+        """
+        dim = len(params[RhoElem.MEAN])
+        theta = np.zeros(dim, dtype=np.float64)
+        for i in range(dim):
+            theta[i] = np.random.normal(params[RhoElem.MEAN, i], params[RhoElem.STD, i])
+
+        if self.n_jobs == 1:
+            raw_res = []
+            for _ in range(self.episodes_per_theta):
+                raw_res.append(self.trajectory_sampler.collect_trajectory(
+                    params=theta,
+                    starting_state=None
+                ))
+        else:
+            worker_dict = dict(
+                env=copy.deepcopy(self.env),
+                pol=copy.deepcopy(self.pol),
+                dp=copy.deepcopy(self.dp),
+                params=copy.deepcopy(theta),
+                starting_state=None
+            )
+            delayed_functions = delayed(pg_sampling_worker)
+            raw_res = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                delayed_functions(**worker_dict) for _ in range(self.episodes_per_theta)
             )
 
-        # extract the results
-        perf_res = np.zeros(100, dtype=np.float64)
-
-        if gaps:
-            scores = np.zeros((self.env.horizon, len(self.pol.history.get_all_leaves()), self.pol.tot_params), dtype=np.float64)
-        else:
-            scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
-
-        states = np.zeros((self.env.horizon, self.env.state_dim), dtype=np.float64)
-
+        perf_res = np.zeros(self.episodes_per_theta, dtype=np.float64)
         for i, elem in enumerate(raw_res):
-            # perf_res[i] = elem[TrajectoryResults.PERF]
-            perf_res = elem[TrajectoryResults.PERF]
-            scores[i] = elem[TrajectoryResults.ScoreList]
-            states[i] = elem[TrajectoryResults.StateList]
+            perf_res[i] = elem[TrajectoryResults.PERF]
 
-        return [perf_res, scores, states]
+        return [theta, perf_res]

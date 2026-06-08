@@ -137,7 +137,7 @@ class PolicyGradient:
             else:
                 res = []
                 for j in range(self.batch_size):
-                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas), seed=self.seed)
+                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas), seed=self.seed+j+i*self.batch_size)
                     res.append(tmp_res)
             
             # Update performance

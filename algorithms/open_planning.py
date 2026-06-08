@@ -140,7 +140,7 @@ class CLOLPlanning:
                 # parallel trajectory sampling
                 res = []
                 for j in range(self.batch_size):
-                    tmp_res = self.sampler.collect_trajectory_mixed_planning(params=copy.deepcopy(self.thetas), planning_horizon=self.planning_horizon, persistence=self.persistence, seed=self.seed)
+                    tmp_res = self.sampler.collect_trajectory_mixed_planning(params=copy.deepcopy(self.thetas), planning_horizon=self.planning_horizon, persistence=self.persistence, seed=self.seed+j+i*self.batch_size)
                     res.append(tmp_res)
 
 

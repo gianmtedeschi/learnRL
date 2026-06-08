@@ -163,7 +163,10 @@ class DeepGaussianPolicy(NeuralNetworkPolicy):
         # Forward pass to compute the mean action
         action_mean = self.net.forward(state_tensor)
         
-        log_prob = -0.5 * (((action_tensor - action_mean) / sigma_tensor) ** 2).sum() - 0.5 * torch.log(torch.sqrt(2 * torch.pi * sigma_tensor ** 2)) * action_tensor.size(0)
+        # no 0.5 factor in the log probability
+        # log_prob = -0.5 * (((action_tensor - action_mean) / sigma_tensor) ** 2).sum() - 0.5 * torch.log(torch.sqrt(2 * torch.pi * sigma_tensor ** 2)) * action_tensor.size(0)
+        log_prob = -0.5 * (((action_tensor - action_mean) / sigma_tensor) ** 2).sum() - torch.log(torch.sqrt(2 * torch.pi * sigma_tensor ** 2)) * action_tensor.size(0)
+
         # log_prob = -((action_tensor - action_mean) ** 2) / (2 * sigma_tensor ** 2) - sigma_tensor - .5 * math.log(2 * math.pi)
         # log_prob = -0.5 * ((action_tensor - action_mean) / sigma_tensor).pow(2).sum()
         # log_prob -= 0.5 * torch.log(2 * torch.pi * sigma_tensor ** 2) * action_tensor.size(0)

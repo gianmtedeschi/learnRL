@@ -1,7 +1,7 @@
 # Libraries
 import argparse
 import datetime
-from algorithms import CLOLPlanning
+from algorithms import CLOLPlanning, PGPE
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
@@ -25,6 +25,13 @@ parser.add_argument(
     help="How many iterations the algorithm must do.",
     type=int,
     default=5
+)
+parser.add_argument(
+    "--alg",
+    help="The algorithm to use.",
+    type=str,
+    default="clol",
+    choices=["clol", "pgpe"]
 )
 parser.add_argument(
     "--estimator",
@@ -188,7 +195,10 @@ for i in range(args.n_trials):
     np.random.seed(i)
     random.seed(i)
 
-    dir_name = f"CLOL_Planning_{args.ite}_{args.env}_{args.horizon}_{args.planning_horizon}_{str(args.gamma).replace('.', '')}_{args.lr_strategy}_"
+    if args.alg == "clol":
+        dir_name = f"CLOL_Planning_{args.ite}_{args.env}_{args.horizon}_{args.planning_horizon}_{str(args.gamma).replace('.', '')}_{args.lr_strategy}_"
+    else:
+        dir_name = f"PGPE_{args.ite}_{args.env}_{args.horizon}_{str(args.gamma).replace('.', '')}_{args.lr_strategy}_"
     dir_name += f"{str(args.lr).replace('.', '')}_{args.batch}_"
     
     if args.clip:
@@ -316,30 +326,58 @@ for i in range(args.n_trials):
     dir_name = base_dir + dir_name + "/" + f"trial_{i}"
 
     """Algorithms"""
-    alg_parameters = dict(
-        lr=[args.lr],
-        lr_strategy=args.lr_strategy,
-        estimator_type=args.estimator,
-        initial_theta=pol.parameters,
-        ite=args.ite,
-        batch_size=args.batch,
-        env=env,
-        policy=pol,
-        data_processor=dp,
-        directory=dir_name,
-        verbose=args.verbose,
-        checkpoint_freq=50,
-        baselines=args.baseline,
-        planning_horizon=args.planning_horizon,
-        debug = args.debug,
-        n_jobs = args.n_jobs,
-        persistence = args.persistence,
-        seed=i
-    )
-    alg = CLOLPlanning(**alg_parameters)
+    if args.alg == "clol":
+        alg_parameters = dict(
+            lr=[args.lr],
+            lr_strategy=args.lr_strategy,
+            estimator_type=args.estimator,
+            initial_theta=pol.parameters,
+            ite=args.ite,
+            batch_size=args.batch,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=args.verbose,
+            checkpoint_freq=50,
+            baselines=args.baseline,
+            planning_horizon=args.planning_horizon,
+            debug=args.debug,
+            n_jobs=args.n_jobs,
+            persistence=args.persistence,
+            seed=i
+        )
+        alg = CLOLPlanning(**alg_parameters)
+    elif args.alg == "pgpe":
+        init_mean = np.array(pol.parameters, dtype=np.float64).reshape(-1)
+        init_std = np.ones_like(init_mean, dtype=np.float64) * args.std
+        initial_rho = np.array([init_mean, init_std], dtype=np.float64)
+
+        alg_parameters = dict(
+            lr=[args.lr],
+            initial_rho=initial_rho,
+            ite=args.ite,
+            batch_size=args.batch,
+            episodes_per_theta=1,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=args.verbose,
+            checkpoint_freq=50,
+            lr_strategy=args.lr_strategy,
+            n_jobs_param=args.n_jobs,
+            n_jobs_traj=1
+        )
+        alg = PGPE(**alg_parameters)
+    else:
+        raise ValueError("Invalid algorithm name.")
     
 
-    print(text2art(f"==  CLOLP TEST on {args.env} =="))
+    if args.alg == "clol":
+        print(text2art(f"==  CLOLP TEST on {args.env} =="))
+    else:
+        print(text2art(f"==  PGPE TEST on {args.env} =="))
     print(text2art(f"Trial {i}"))
     print(args)
     print(text2art("Learn Start"))

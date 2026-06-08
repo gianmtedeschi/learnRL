@@ -30,6 +30,7 @@ class LQ(BaseEnv):
                  action_dim=1,
                  state_dim=1,
                  noise=0,
+                 max_action=10.0,
                  seed=None) -> None:
 
         self.state_dim = state_dim  # state dimension
@@ -37,7 +38,7 @@ class LQ(BaseEnv):
         self.horizon = horizon  # task horizon (reset is not automatic!)
         self.gamma = gamma  # discount factor
         self.max_pos = 10 * np.ones(self.state_dim)  # max state for clipping
-        self.max_action = np.inf * np.ones(self.action_dim)  # max action for clipping
+        self.max_action = max_action * np.ones(self.action_dim)  # max action for clipping
         self.sigma_noise = noise * np.eye(self.state_dim)  # std dev of environment noise
         self.A = np.eye(self.state_dim) * 0.9
         self.B = np.eye(self.state_dim, self.action_dim) * 0.9
@@ -60,6 +61,7 @@ class LQ(BaseEnv):
     def step(self, action, render=False):
         u = np.clip(np.ravel(np.atleast_1d(action)), -self.max_action, self.max_action).flatten()
         noise = np.dot(self.sigma_noise, np.random.randn(self.state_dim))
+
         # xn = np.clip(np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
         xn = np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise
         cost = np.dot(self.state,
@@ -77,9 +79,14 @@ class LQ(BaseEnv):
         By default, uniform initialization
         """
         self.timestep = 0
+        if seed is not None:
+            self.seed(seed)
         if state is None:
             self.state = np.array(self.np_random.uniform(low=-np.ones(self.state_dim) * 5.,
-                                                         high=np.ones(self.state_dim) * 5.))
+                                                        high=np.ones(self.state_dim) * 5.))
+                        
+            # self.state = np.array(self.np_random.uniform(low=-self.max_pos,
+            #                                             high=self.max_pos))
         else:
             self.state = np.array(state)
 
