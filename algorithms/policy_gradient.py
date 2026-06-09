@@ -97,7 +97,8 @@ class PolicyGradient:
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
         self.time = 0
         self.performance_idx = np.zeros(ite, dtype=np.float64)
-        self.estimated_gradient = np.zeros(ite, dtype=np.float64)
+        self.estimated_gradient = np.zeros(self.dim, dtype=np.float64)
+        self.gradient_history = np.zeros((self.ite, self.dim), dtype=np.float64)
         self.best_theta = np.zeros(self.dim, dtype=np.float64)
         self.best_performance_theta = -np.inf
         self.sampler = TrajectorySampler(
@@ -193,8 +194,9 @@ class PolicyGradient:
             if self.time % self.checkpoint_freq == 0:
                 self.save_results()
 
-            # save theta history
+            # save theta and gradient history
             self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+            self.gradient_history[self.time, :] = copy.deepcopy(self.estimated_gradient)
 
             # time update
             self.time += 1
@@ -202,6 +204,8 @@ class PolicyGradient:
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
 
+        # final flush so the last iteration's history is persisted
+        self.save_results()
         return
 
     def update_gpomdp(
@@ -248,7 +252,7 @@ class PolicyGradient:
             results = {
                 "performance": np.array(self.performance_idx, dtype=float).tolist(),
                 "best_theta": np.array(self.best_theta, dtype=float).tolist(),
-                "gradient_history": np.array(self.estimated_gradient, dtype=np.float64).tolist(),
+                "gradient_history": np.array(self.gradient_history, dtype=np.float64).tolist(),
             }
         else:
             results = {
