@@ -164,9 +164,12 @@ cython_debug/
 
 # Results
 **/result*/
-.json
+*.json
 
 # Img
-.tex
-.pdf
-.png
+*.tex
+*.pdf
+*.png
+
+# Scripts
+*.sh
