@@ -47,51 +47,67 @@ class SplitGaussianPolicy(GaussianPolicy, BasePolicy):
 
         # self.history = history
         self.history = BinaryTree()
-        self.tot_params = dim_action
+        
+        # Per-leaf parameter count. A constant leaf holds an action-sized mean
+        # (dim_action); a linear leaf holds a full gain matrix of shape
+        # (dim_action, dim_state), stored flattened -> dim_action * dim_state.
+        self.tot_params = dim_action * dim_state if linear else dim_action
         self.deterministic = deterministic
         self.linear = linear
 
         return
 
-    def draw_action(self, state) -> float:
-        if self.history is None:
-            mean = self.parameters
-            action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
+    def _leaf_mean(self, theta, state) -> np.array:
+        """Action mean for one leaf parameter `theta` at `state`.
 
-        mean = self.history.find_region_leaf(state, policy=True)
-        if mean is None:
-            mean = self.history.root.val[0]
-            action = np.random.normal(mean, np.identity(1) * self.std_dev)
-        else:
-            mean = mean.val[0]
-            action = np.random.normal(mean, np.identity(1) * self.std_dev)
-
-        # valid for pgaps
-        if self.deterministic:
-            action = np.random.normal(mean, np.identity(1) * self.std_dev)
-        
+        Constant leaves: the mean is the (action-sized) parameter itself.
+        Linear leaves: theta is a flattened (dim_action, dim_state) gain and the
+        mean is `theta @ state` (the LQ-style linear controller a = K s).
+        """
+        theta = np.asarray(theta, dtype=np.float64)
         if self.linear:
-            action = np.random.normal(mean, np.identity(1) * self.std_dev) @ state
+            gain = theta.reshape(self.dim_action, self.dim_state)
+            return gain @ np.ravel(state)
+        return np.ravel(theta)
 
-         
-        return action.ravel()
+    def draw_action(self, state) -> float:
+        state = np.ravel(state)
+
+        leaf = self.history.find_region_leaf(state, policy=True)
+        theta = self.history.root.val[0] if leaf is None else leaf.val[0]
+
+        mean = self._leaf_mean(theta, state)
+        action = np.random.normal(mean, self.std_dev, size=self.dim_action)
+
+        return np.ravel(action)
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:
             return super().compute_score(state, action)
-        
-        scores = np.zeros((len(self.history.get_all_leaves()), self.tot_params))
-        
+
+        state = np.ravel(state)
+        action = np.ravel(action)
+
+        leaves = self.history.get_all_leaves()
+        scores = np.zeros((len(leaves), self.tot_params))
+
         leaf = self.history.find_region_leaf(state, policy=True)
 
-        for position, Node in enumerate(self.history.get_all_leaves()):
-            if np.all(leaf.val[0] == Node.val[0]):
+        # Write the score only at the region the state actually falls in. Match
+        # by unique node_id (identity), not by parameter value: distinct leaves
+        # can hold equal values, and value-matching would (wrongly) credit the
+        # score to every such leaf.
+        for position, node in enumerate(leaves):
+            if node.node_id == leaf.node_id:
+                deviation = action - self._leaf_mean(leaf.val[0], state)
                 if self.linear:
-                    action = action - (leaf.val[0] @ state)
-                    scores[position] = (action * state) / (self.std_dev ** 2)
+                    # grad wrt a (dim_action, dim_state) gain: outer(dev, state),
+                    # flattened to match the leaf's flattened parameter layout.
+                    scores[position] = np.outer(deviation, state).ravel() / (self.std_dev ** 2)
                 else:
-                    scores[position] = (action - leaf.val[0]) / (self.std_dev ** 2)
-        
+                    scores[position] = deviation / (self.std_dev ** 2)
+                break
+
         return scores
     
     def reduce_exploration(self):

@@ -134,42 +134,34 @@ class BinaryTree:
         return res
     
     def get_region(self, node, dim_state):
-        region = np.zeros((dim_state, 2))
-        for i in range(dim_state):
-            # reset node to selected one
-            test_node = node
+        # A leaf's region is the intersection of the half-spaces induced by its
+        # ancestors' splits. Each internal node stores its split as
+        # val[1] = [axis, value]: going *left* at that node upper-bounds `axis` at
+        # `value`, going *right* lower-bounds it. Walking from the leaf up to the
+        # root, the binding bound on each axis is the tightest one (smallest upper
+        # / largest lower) among all same-axis ancestors.
+        # NOTE: the previous implementation ignored val[1][0] (the split axis) and
+        # applied every ancestor's value to *all* dimensions, producing wrong
+        # boxes in >1-D (states then fail the containment test in split(), which
+        # is what starved the von Mises test of samples).
+        if node.id_left is not None or node.id_right is not None:
+            print("[TREE POLICY] You are requesting a region for a non leaf!")
+            return None
 
-            is_left = False
-            is_right = False
-            is_root = False
-            lb = -np.inf
-            ub = np.inf
-            
-            if test_node.id_left is not None or test_node.id_right is not None:
-                print("[TREE POLICY] You are requesting a region for a non leaf!")
-                return None
+        region = np.tile(np.array([-np.inf, np.inf], dtype=np.float64), (dim_state, 1))
 
-            # case we are root
-            if test_node.id_father is None:
-                region[i] = [lb, ub]
-                continue
-            
-            father_node = self.nodes[test_node.id_father]
-            while not ((is_left and is_right) or is_root):
-                if father_node.id_left == test_node.node_id and not is_left:
-                    ub = father_node.val[1][1]
-                    is_left = True
-                elif father_node.id_right == test_node.node_id and not is_right:
-                    lb = father_node.val[1][1]
-                    is_right = True
-
-                if father_node.id_father is None:
-                    is_root = True
-                else:
-                    test_node = father_node
-                    father_node = self.nodes[father_node.id_father]
-            
-            region[i] = [lb, ub]
+        child = node
+        while child.id_father is not None:
+            father = self.nodes[child.id_father]
+            axis = int(father.val[1][0])
+            value = father.val[1][1]
+            if father.id_left == child.node_id:
+                # child is in the left subtree -> `value` upper-bounds `axis`
+                region[axis][1] = min(region[axis][1], value)
+            elif father.id_right == child.node_id:
+                # child is in the right subtree -> `value` lower-bounds `axis`
+                region[axis][0] = max(region[axis][0], value)
+            child = father
 
         return region
     

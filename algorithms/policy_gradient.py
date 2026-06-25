@@ -44,6 +44,7 @@ class PolicyGradient:
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             debug: bool = False,
+            save_det: int = 1,
             seed = 0
     ) -> None:
         # Class' parameter with checks
@@ -113,6 +114,9 @@ class PolicyGradient:
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(alpha=self.lr)
+
+        self.save_det = save_det
+
         return
 
     def learn(self) -> None:
@@ -204,6 +208,9 @@ class PolicyGradient:
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
 
+        if(self.save_det):
+            self.sample_deterministic_curve()
+
         # final flush so the last iteration's history is persisted
         self.save_results()
         return
@@ -245,6 +252,43 @@ class PolicyGradient:
             print(f"Parameter configuration: {self.best_theta}")
             print("#" * 30)
         return
+    
+    def sample_deterministic_curve(self):
+        """
+        Summary:
+            Switch-off the noise and collect the deterministic performance 
+            associated to the sequence of parameter configurations seen during
+            the learning.
+        """
+        # make the policy deterministic
+        self.policy.std_dev = 0
+
+        # sample
+        for i in tqdm(range(self.ite)):
+            self.policy.set_parameters(thetas=self.theta_history[i, :])
+            worker_dict = dict(
+                    env=copy.deepcopy(self.env),
+                    pol=copy.deepcopy(self.policy),
+                    dp=copy.deepcopy(self.data_processor),
+                    params=copy.deepcopy(self.theta_history[i, :]),
+                    # seed=self.seed
+                )
+            
+            # build the parallel functions
+            delayed_functions = delayed(pg_sampling_worker)
+
+            # parallel computation
+            res = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                delayed_functions(**worker_dict, seed=self.seed + j) for j in range(self.batch_size)
+            )
+
+            # extract data
+            ite_perf = np.zeros(self.batch_size, dtype=np.float64)
+            for j in range(self.batch_size):
+                ite_perf[j] = res[j][TrajectoryResults.PERF]
+
+            # compute mean
+            self.deterministic_curve[i] = np.mean(ite_perf)
 
 
     def save_results(self) -> None:
@@ -253,6 +297,7 @@ class PolicyGradient:
                 "performance": np.array(self.performance_idx, dtype=float).tolist(),
                 "best_theta": np.array(self.best_theta, dtype=float).tolist(),
                 "gradient_history": np.array(self.gradient_history, dtype=np.float64).tolist(),
+                "deterministic_res": np.array(self.deterministic_curve, dtype=np.float64).tolist(),
             }
         else:
             results = {
@@ -261,6 +306,7 @@ class PolicyGradient:
                 "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
                 "last_theta": np.array(self.thetas, dtype=float).tolist(),
                 "best_perf": float(self.best_performance_theta),
+                "deterministic_res": np.array(self.deterministic_curve, dtype=np.float64).tolist(),
             }
 
         # Save the json

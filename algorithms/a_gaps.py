@@ -40,11 +40,20 @@ class PolicyGradientSplit(PolicyGradient):
             directory: str = "",
             verbose: bool = False,
             natural: bool = False,
-            checkpoint_freq: int = 1,
+            checkpoint_freq: int = 50,
             n_jobs: int = 1,
             max_splits: int = 100,
             baselines: str = None,
             alpha: float = 0.1,
+            split_rtol: float = 0.3,
+            split_atol: float = 0.1,
+            project_angle: bool = True,
+            filter_empty_regions: bool = True,
+            min_angle_samples: int = 5,
+            ema_fast_decay: float = 0.9,
+            ema_slow_decay: float = 0.95,
+            optimum_patience: int = 2,
+            optimum_init_patience: int = 5,
             seed: int = 0
     ) -> None:
         # Class' parameter with checks
@@ -93,6 +102,11 @@ class PolicyGradientSplit(PolicyGradient):
         self.parallel_sampling = bool(self.n_jobs != 1)
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
+        # Per-leaf parameter dimension. Constant leaves hold an action-sized
+        # mean (dim_action); linear leaves hold a flattened gain of shape
+        # (dim_action, dim_state) -> dim_action * dim_state. All the score /
+        # gradient tensors carry this as their last axis.
+        self.param_dim = self.policy.tot_params
 
         # Useful structures
         self.theta_history = dict.fromkeys([i for i in range(self.ite)], np.array(0))
@@ -122,8 +136,65 @@ class PolicyGradientSplit(PolicyGradient):
         self.start_split = False
         self.delta = 0
         self.split_ite = []
+        # Per split-search diagnostics for the dimensionality study (filled in
+        # learn_split, dumped by save_results): straddling-sample count N and
+        # acceptance per candidate boundary. Lets us measure the statistical
+        # power of the split test as the state dimension grows.
+        self.split_test_log = []
+        self._last_split_N = 0
         self.trial = 0
         self.alpha = alpha
+
+        # Plateau-based split trigger (see learn()). split_rtol is the relative
+        # split_rtol is the one-sided relative slack on the dual-EMA convergence
+        # test (see learn()): a split fires when the slow-gradient EMA norm falls
+        # within (1 + split_rtol) of the fast one's. Larger => earlier / more
+        # splits. split_atol is currently unused (kept for API compatibility).
+        self.split_rtol = split_rtol
+        self.split_atol = split_atol
+
+        # Dual exponential moving average of the gradient. Convergence (an
+        # "optimum", which triggers a split) is declared when the slow EMA's norm
+        # comes down to within (1 + split_rtol) of the fast one's for
+        # `optimum_patience` consecutive iterations. Intuition: while learning
+        # progresses the gradient shrinks and the lagging slow EMA stays above the
+        # fast one; as it flattens the slow EMA catches up.
+        # Convention: ema <- decay * ema + (1 - decay) * gradient, so a *larger*
+        # decay means more smoothing / slower reaction. Hence fast uses the
+        # smaller decay (ema_fast_decay) and slow the larger one (ema_slow_decay).
+        self.ema_fast_decay = ema_fast_decay
+        self.ema_slow_decay = ema_slow_decay
+        # Consecutive in-neighbourhood iterations required to declare convergence.
+        self.optimum_patience = optimum_patience
+        # Initial grace period (iterations) after a reset during which the two
+        # EMAs are still seeded from too few gradients, so the comparison is
+        # skipped (they start out identical).
+        self.optimum_init_patience = optimum_init_patience
+
+        # EMA running state (reset after every split, see learn()).
+        self.gradient_mean_fast = 0
+        self.gradient_mean_slow = 0
+        self.gradient_mean = 0
+        self.ema_count = 0
+        self.optimum_counter = 0
+        self.at_optimum = False
+
+        # Dimension-robust split-acceptance test (see check_split_von_mises).
+        # The von Mises test compares the *direction* of the left/right
+        # sub-region gradients. In high dim the angle between two independent
+        # noisy gradient vectors concentrates at pi/2, so the full-vector test
+        # can never conclude "opposing" and the tree stops splitting (>=8-D).
+        #   project_angle: isolate the action coordinate aligned with the split
+        #     axis (square systems only), recovering the power of the 1-D case.
+        #   filter_empty_regions: drop trajectories that don't visit a sub-region
+        #     instead of crediting them the null angle pi/2 (which biases the
+        #     mean toward "no split").
+        #   min_angle_samples: refuse to decide a split on too few samples.
+        # Set project_angle=filter_empty_regions=False to reproduce the legacy
+        # (low-dim) behaviour exactly.
+        self.project_angle = project_angle
+        self.filter_empty_regions = filter_empty_regions
+        self.min_angle_samples = min_angle_samples
 
         self.seed = seed
         return
@@ -132,8 +203,6 @@ class PolicyGradientSplit(PolicyGradient):
         """Learning function"""
         splits = 0
         axis = 0
-        gradient_sum, gradient_mean = 0, 0
-        mean_count = 0
         for i in tqdm(range(self.ite)):
             if self.parallel_sampling:
                 # parallel trajectory sampling
@@ -167,7 +236,7 @@ class PolicyGradientSplit(PolicyGradient):
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)
-            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim, self.env.action_dim),
+            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim, self.param_dim),
                                     dtype=np.float64)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
             state_vector = np.zeros((self.batch_size, self.env.horizon, self.dim_state), dtype=np.float64)
@@ -211,10 +280,48 @@ class PolicyGradientSplit(PolicyGradient):
                     err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                     raise NotImplementedError(err_msg)
 
-                mean_count += 1
-                self.delta = self.compute_delta(gradient_mean, gradient_sum, estimated_gradient, mean_count)
-                gradient_sum += estimated_gradient
-                gradient_mean = gradient_sum/mean_count
+                self.ema_count += 1
+
+                # Dual EMA of the gradient. The first sample after a reset seeds
+                # both averages identically; from then on the two decays pull them
+                # apart (fast reacts quicker, slow lags / smooths more).
+                if self.ema_count > 1:
+                    self.gradient_mean_fast = (
+                        self.ema_fast_decay * self.gradient_mean_fast
+                        + (1 - self.ema_fast_decay) * estimated_gradient
+                    )
+                    self.gradient_mean_slow = (
+                        self.ema_slow_decay * self.gradient_mean_slow
+                        + (1 - self.ema_slow_decay) * estimated_gradient
+                    )
+                else:
+                    self.gradient_mean_fast = estimated_gradient
+                    self.gradient_mean_slow = estimated_gradient
+
+                # Reference mean kept for any external logging.
+                self.gradient_mean = self.gradient_mean_fast
+
+                # Convergence: the slow EMA norm has come down to within
+                # (1 + split_rtol) of the fast one's for `optimum_patience`
+                # consecutive iterations. Both are reduced to a scalar via the norm
+                # so the test stays well-defined after a split (gradient is a
+                # (n_leaves, param_dim) array). Skip the initial grace period,
+                # where the EMAs are still seeded from too few gradients.
+                if self.ema_count <= self.optimum_init_patience:
+                    self.optimum_counter = 0
+                    self.at_optimum = False
+                else:
+                    slow_norm = np.linalg.norm(self.gradient_mean_slow)
+                    fast_norm = np.linalg.norm(self.gradient_mean_fast)
+                    if slow_norm <= fast_norm * (1 + self.split_rtol):
+                        self.optimum_counter += 1
+                    else:
+                        self.optimum_counter = 0
+                    self.at_optimum = self.optimum_counter >= self.optimum_patience
+                    if self.verbose:
+                        print(f"EMA norms slow={slow_norm:.6g} fast={fast_norm:.6g} "
+                              f"(slack x{1 + self.split_rtol:.3g}), "
+                              f"streak: {self.optimum_counter}/{self.optimum_patience}")
 
                 self.update_parameters(estimated_gradient)
                 if self.verbose:
@@ -225,10 +332,14 @@ class PolicyGradientSplit(PolicyGradient):
                 self.policy.history.to_png(name)
                 splits += 1
                 self.split_ite.append(i)
-                gradient_sum = 0
-                gradient_mean = 0
-                mean_count = 0
-                self.delta = 0
+                # Reset the EMA state so convergence is judged afresh on the new
+                # (larger) parameterisation, starting from the initial grace period.
+                self.gradient_mean_fast = 0
+                self.gradient_mean_slow = 0
+                self.gradient_mean = 0
+                self.ema_count = 0
+                self.optimum_counter = 0
+                self.at_optimum = False
                 axis = 0
 
             # Log
@@ -269,8 +380,12 @@ class PolicyGradientSplit(PolicyGradient):
 
     def split(self, score_vector, state_vector, reward_vector, split_state) -> list:
         traj = []
-    
-        closest_leaf = self.policy.history.find_region_leaf(split_state)
+
+        # The leaf being split is known (self.splitting_param). We must NOT rely on
+        # find_region_leaf(split_state) here: split_state is [axis, value] and the
+        # tree navigation compares only the value (ignoring the axis), so in >1-D
+        # it can descend into the wrong leaf and hand back a wrong box.
+        closest_leaf = self.splitting_param
         lower_vertex = self.policy.history.get_lower_vertex(closest_leaf, self.dim_state)
         upper_vertex = self.policy.history.get_upper_vertex(closest_leaf, self.dim_state)
 
@@ -292,8 +407,8 @@ class PolicyGradientSplit(PolicyGradient):
                 right_lower[i] = split_state[1]
                 
         traj_l, traj_r = 0, 0
-        score_left = np.zeros((self.batch_size, self.env.horizon, self.env.action_dim), dtype=np.float64)
-        score_right = np.zeros((self.batch_size, self.env.horizon, self.env.action_dim), dtype=np.float64)
+        score_left = np.zeros((self.batch_size, self.env.horizon, self.param_dim), dtype=np.float64)
+        score_right = np.zeros((self.batch_size, self.env.horizon, self.param_dim), dtype=np.float64)
 
         
         for i in range(len(state_vector)):
@@ -334,6 +449,21 @@ class PolicyGradientSplit(PolicyGradient):
     def learn_split(self, score_vector, state_vector, reward_vector, axis) -> None:
         splits = {}
 
+        # Project the angle test onto the action coordinate aligned with the
+        # split axis (square systems only). For other geometries we fall back to
+        # the full-vector test (coord=None). Linear leaves carry a flattened
+        # (dim_action, dim_state) gradient where a single state axis no longer
+        # maps to one coordinate, so projection is disabled there.
+        coord = None
+        if (self.project_angle and not getattr(self.policy, "linear", False)
+                and self.dim_action == self.dim_state and axis < self.dim_action):
+            coord = axis
+
+        # Per-attempt diagnostics for the scalability study: the straddling-sample
+        # count N and the accept decision for every candidate boundary evaluated.
+        n_samples = []
+        accepted_flags = []
+
         for i in range(len(self.split_grid)):
             res = self.split(score_vector, state_vector, reward_vector, np.array([axis, self.split_grid[i][axis]]))
 
@@ -343,13 +473,26 @@ class PolicyGradientSplit(PolicyGradient):
 
             gradient_norm = np.linalg.norm(estimated_gradient[0]) + np.linalg.norm(estimated_gradient[1])
 
-            
-            key = tuple([axis, self.split_grid[i][axis]])  
-            
-            if self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1], self.alpha):
+
+            key = tuple([axis, self.split_grid[i][axis]])
+
+            accepted = self.check_split_von_mises(reward_trajectory[0], reward_trajectory[1], self.alpha, coord=coord)
+            n_samples.append(self._last_split_N)
+            accepted_flags.append(bool(accepted))
+            if accepted:
                 splits[key] = [thetas, True, gradient_norm]
             else:
                 splits[key] = [thetas, False, gradient_norm]
+
+        # One record per split-search call: when, on which axis, how many
+        # candidates, the N per candidate, and how many passed the von Mises test.
+        self.split_test_log.append({
+            "ite": int(self.time),
+            "axis": int(axis),
+            "n_candidates": int(len(self.split_grid)),
+            "N": n_samples,
+            "n_accepted": int(sum(accepted_flags)),
+        })
         
         # remove duplicate splits
         valid_splits = {key: value for key, value in splits.items() if value[1] is True}
@@ -396,7 +539,9 @@ class PolicyGradientSplit(PolicyGradient):
         
         # Update parameters
         if split_state is not None:
-            old_theta = self.policy.history.find_region_leaf(split_state).val[0]
+            # Base parameters of the leaf being split (see note in split(): do not
+            # navigate by split_state, which only carries [axis, value]).
+            old_theta = self.splitting_param.val[0]
             coord = self.splitting_coordinate
             
         if self.lr_strategy == "constant":
@@ -448,15 +593,34 @@ class PolicyGradientSplit(PolicyGradient):
         else:
             return False
     
-    def compute_angle(self,left,right):
-        dot_products= np.sum(left*right,axis=1)
-        left_norms = np.linalg.norm(left,axis=1)
-        right_norms = np.linalg.norm(right,axis=1)
+    def compute_angle(self, left, right, coord=None):
+        # (1) Project onto the split-relevant action coordinate. The full-vector
+        # angle between two noisy gradients concentrates at pi/2 as the action
+        # dimension grows, drowning the opposing-gradient signal that justifies
+        # a split; that signal lives in the coordinate aligned with the split
+        # axis, so isolating it restores the power of the (working) 1-D case.
+        if coord is not None:
+            left = left[:, coord:coord + 1]
+            right = right[:, coord:coord + 1]
+
+        dot_products = np.sum(left * right, axis=1)
+        left_norms = np.linalg.norm(left, axis=1)
+        right_norms = np.linalg.norm(right, axis=1)
 
         non_zero_indices = np.logical_and(left_norms != 0, right_norms != 0)
-    
-        cos_angles = np.zeros_like(dot_products)
-        cos_angles[non_zero_indices] = dot_products[non_zero_indices] / (left_norms[non_zero_indices] * right_norms[non_zero_indices])
+
+        # (2) Drop trajectories that never visit one of the sub-regions. The old
+        # code left these at cos=0 (-> angle = pi/2), injecting the null angle
+        # and biasing the circular mean toward pi/2 (i.e. "do not split").
+        if self.filter_empty_regions:
+            dot_products = dot_products[non_zero_indices]
+            left_norms = left_norms[non_zero_indices]
+            right_norms = right_norms[non_zero_indices]
+            cos_angles = dot_products / (left_norms * right_norms)
+        else:
+            cos_angles = np.zeros_like(dot_products)
+            cos_angles[non_zero_indices] = dot_products[non_zero_indices] / (left_norms[non_zero_indices] * right_norms[non_zero_indices])
+
         cos_angles = np.clip(cos_angles, -1.0, 1.0)
 
         angles = np.arccos(cos_angles)
@@ -465,13 +629,28 @@ class PolicyGradientSplit(PolicyGradient):
     def uniformity_test(self, n, R):
         return (2 * n * R**2 > stats.chi2.ppf(0.995, 2))
 
-    def check_split_von_mises(self, left, right, alpha=0.1):
-        
+    def check_split_von_mises(self, left, right, alpha=0.1, coord=None):
+
         test = False
-        angle = self.compute_angle(left, right)
+        angle = self.compute_angle(left, right, coord=coord)
 
         # print("DEBUG:", left, right, angle)
         N = len(angle)
+        # Expose N (number of trajectories that straddle the candidate boundary)
+        # to the caller for the scalability study (see learn_split logging).
+        self._last_split_N = int(N)
+
+        # Too few non-empty trajectories to decide a split reliably (can happen
+        # once empty sub-regions are filtered out): refuse rather than accept on
+        # noise. The threshold scales with the batch (5%), with min_angle_samples
+        # as an absolute floor, so it stays meaningful as batch_size grows.
+        min_samples = max(self.min_angle_samples, int(round(0.05 * self.batch_size)))
+
+        if N < self.min_angle_samples:
+            if self.verbose:
+                print(f"Too few samples for split test (N={N} < {min_samples})")
+            return False
+
         C_1 = np.sum(np.cos(angle))
         S_1 = np.sum(np.sin(angle))
         R_1 = np.sqrt(C_1**2 + S_1**2)
@@ -519,34 +698,41 @@ class PolicyGradientSplit(PolicyGradient):
         """
 
         # Get the valid region for the current splitting parameter
-        valid_region = self.policy.history.get_region(self.splitting_param, self.dim_state)
+        valid_region = np.asarray(
+            self.policy.history.get_region(self.splitting_param, self.dim_state),
+            dtype=np.float64,
+        )
         if self.verbose:
             print("Valid region: ", valid_region)
 
-        # Draw samples from a geometric distribution or uniform distribution in case of undiscoounted MDP
-        if self.env.gamma == 1:
-            samples = np.random.randint(0, self.env.horizon, num_samples)
-        else:
-            samples = np.random.geometric(1 - self.env.gamma, num_samples)
-        samples = np.clip(samples, 0, self.env.horizon - 1)
+        # Collect every visited state that falls inside the leaf region across
+        # *all* state dimensions. We use the full (batch x horizon) occupancy
+        # rather than a few discounted samples so the quantiles below are a
+        # reliable picture of where the policy spends time in this leaf.
+        all_states = states_vector.reshape(-1, self.dim_state)
+        in_region = np.all(
+            (all_states >= valid_region[:, 0]) & (all_states <= valid_region[:, 1]),
+            axis=1,
+        )
+        axis_vals = all_states[in_region, axis]
 
-        # Get the points to sample from the trajectories
-        points = np.linspace(0, num_samples - 1, num_samples, dtype=int) % self.batch_size
+        # Candidate split points = interior quantiles of the occupied axis values.
+        # Quantiles balance the number of states on each side of the boundary,
+        # which maximises the trajectories that straddle it -> larger N in the
+        # angle test (this is what avoids the "too few samples" refusals). We stay
+        # in the central [0.1, 0.9] band so every candidate keeps >=~10% of the
+        # occupancy on its smaller side; endpoints would put (almost) everything
+        # on one side and starve the test.
+        if axis_vals.size == 0:
+            self.split_grid = np.zeros((0, self.dim_state), dtype=np.float64)
+            return
+        quantile_levels = np.linspace(0.1, 0.9, max(num_samples, 1))
+        cand = np.unique(np.quantile(axis_vals, quantile_levels))
 
-        # Get the points to sample from the trajectories
-        tmp_grid = states_vector[points, samples]
-
-        # Generate a mask to filter only state in the valid region
-        mask = np.zeros((num_samples, self.dim_state), dtype=bool)
-        for j in range(num_samples):
-            for i in range(self.dim_state):
-                mask[j][i] = (tmp_grid[j][i] >= valid_region[i][0]) & (tmp_grid[j][i] <= valid_region[i][1])
-        
-        # Generate the grid based on the valid region
-        tmp_grid = tmp_grid * mask
-                
-        # Convert each unique tuple back to an array and set a value only in the position defined by axis
-        self.split_grid = np.unique(np.array([self.set_value_at_axis(np.array(x).ravel(), axis) for x in tmp_grid]), axis=0)
+        # Each split point is encoded as a full-dim row with only the split axis
+        # populated (learn_split reads split_grid[i][axis]).
+        self.split_grid = np.zeros((cand.size, self.dim_state), dtype=np.float64)
+        self.split_grid[:, axis] = cand
 
     
     def set_value_at_axis(self, arr, axis):
@@ -569,17 +755,14 @@ class PolicyGradientSplit(PolicyGradient):
             self.gradient_sum = 0
             return
 
-        
-        # mean = np.mean(self.gradient_history[-n:], axis=0)
-        # self.mean = self.gradient_sum/self.ite
-        
-        delta = np.linalg.norm(self.delta)
-        self.delta = 0
-
+        # Convergence is judged by the dual-EMA test in learn(): the slow EMA
+        # has stayed inside a neighbourhood of the fast EMA for `optimum_patience`
+        # consecutive iterations (see self.at_optimum). Here we only act on it.
         if self.verbose:
-            print("Delta gradient mean: ", delta)
+            print(f"At optimum: {self.at_optimum} "
+                  f"(streak {self.optimum_counter}/{self.optimum_patience})")
 
-        if np.isclose(delta, 0, atol=0.5):
+        if self.at_optimum:
             # print(not_avg_gradient.shape)
             var = np.var(not_avg_gradient, axis=0)
             best_region = np.argmax(np.sum(var, axis=1))
@@ -625,7 +808,8 @@ class PolicyGradientSplit(PolicyGradient):
             "thetas_history": list(value.tolist() for value in self.theta_history.values()),
             "last_theta": np.array(self.thetas, dtype=float).tolist(),
             "best_perf": float(self.best_performance_theta),
-            "split_ite": self.split_ite
+            "split_ite": self.split_ite,
+            # "split_test_log": self.split_test_log
         }
 
         # Save the json
